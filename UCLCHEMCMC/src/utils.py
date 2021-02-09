@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import sqlite3 as sql
 import time
-import billiard as Bil
 import MCFunctions as mcf
 os.environ["OMP_NUM_THREADS"] = "1"
 try:
@@ -687,7 +686,6 @@ class suppress_stdout_stderr(object):
        This will not suppress raised exceptions, since exceptions are printed
     to stderr just before a script exits, and after the context manager has
     exited (at least, I think that is why it lets exceptions through).
-
     '''
 
     def __init__(self):

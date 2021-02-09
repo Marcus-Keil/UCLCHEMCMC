@@ -77,17 +77,12 @@ def UILikelihood(ChangingParamsValues, PDLines, BaseParameterDict, ChangingParam
         if (None in ModelData):
             return -np.inf
         for i in range(len(ModelData)):
-            if ModelData[i] == 0 and observation[i] != 0:
-                ModelData[i] = 0.0000000000000000000000001
-            elif ModelData[i] == np.nan:
-                ModelData[i] = -10000000000000000000
-        sigma2 = sigmaObservation ** 2
-        PofDK = (-0.5 * sum(((ModelData - observation) ** 2) / (sigma2) + np.log(sigma2)))
+            if ModelData[i] == np.nan:
+                ModelData[i] = -10000000000000000000000000000000
+        sigma2 = sigmaObservation**2
+        PofDK = -0.5*sum(((observation - ModelData)**2)/sigma2)
         print(PofDK)
-        if np.isnan(PofDK):
-            return -np.inf
-        else:
-            return PofDK
+        return PofDK
     else:
         return -np.inf
 

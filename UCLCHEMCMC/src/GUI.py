@@ -77,7 +77,8 @@ MCMCwalkers = 10
 MCMCStepsPerRun = 200
 MCMCStepsPerItteration = 10
 MCMCNumberProcesses = 6
-
+ManagerPoolSize = 1
+FortranPoolSize = 2
 # Currently unused parameters
 # 'phase', 'switch', 'collapse', 'desorb', 'initialDens', 'initialDens_up',
 # 'maxTemp', 'maxTemp_up',
