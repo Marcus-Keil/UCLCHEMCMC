@@ -1,0 +1,212 @@
+{% extends "baseTemplate.html" %}
+
+{% block title %}
+    {{name}}: Inference
+{% endblock %}
+
+{% block active %}
+    <a class="active" href="/MCMCInference">Inference</a>
+{% endblock %}
+
+{% block content %}
+    <h2>
+        Spectroscopic information:
+    </h2>
+    <p>
+
+    </p>
+    <form action="" method="post">
+        <p>
+            Which molecules and Lines do you wish to add?
+        </p>
+        <p>
+            <select name="AddSpecies">
+                {% for Chemical in Chemicals %}
+                    <option value= "{{Chemical}}" SELECTED>{{Chemical}}</option>"
+                {% endfor %}
+            </select>
+            <input type="submit" name="Add_Mol" value="Add Species"/>
+        </p>
+    </form>
+
+    <p>
+        {% if session["outSpecies"]|length > 0 %}
+            The following Molecules and Lines will be used:
+            {% if session["Error"]|length > 5 %}
+                <p style="color:red">
+                    {{session["Error"]}}
+                </p>
+            {% endif %}
+            {% for Molecule in session["outSpecies"] %}
+            <form action="" method="post">
+                {% if Molecule in session %}
+                    <table>
+                        <tr stle="background-color: hsl(0, 0%, 45%)">
+                            <td>{{Molecule}} Transition [Frequency in GHz]</td>
+                            <td> Observation</td>
+                            <td> Error estimate </td>
+                            <td> Units </td>
+                        </tr>
+                        {% for Line in session[Molecule] %}
+                            {% set Int = Molecule+"_"+Line+"_Int" %}
+                            {% set ER = Molecule+"_"+Line+"_ER" %}
+                            {% set Unit = Molecule+"_"+Line+"_Unit" %}
+                            <tr>
+                                <td>{{ Line }} GHz)</td>
+                                {% if (Int in session) and session[Int] is number %}
+                                    <td>{{session[Int]}}</td>
+                                {% else %}
+                                    <td><input type="text" name="{{ Line }}_Int" value="{{session[Int]}}"></td>
+                                {% endif %}
+                                {% if (ER in session) and session[ER] is number %}
+                                    <td>{{session[ER]}}</td>
+                                {% else %}
+                                    <td><input type="text" name="{{ Line }}_ER" value="{{session[ER]}}"></td>
+                                {% endif %}
+                                {% if (Unit in session) %}
+                                    {% if session[Unit] == "T_r"%}
+                                        <td>T_r (K)</td>
+                                    {% elif session[Unit] == "Intensity"%}
+                                        <td>Intensity (K*km/s)</td>
+                                    {% else %}
+                                        <td>Flux (erg/(s*cm^2))</td>
+                                    {% endif %}
+                                {% else %}
+                                <td>
+                                    <select name="{{ Line }}_Unit">
+                                        <option value= "T_r">T_r (K)</option>
+                                        <option value= "Intensity">Intensity (K*km/s)</option>
+                                        <option value= "Flux" SELECTED>Flux (erg/(s*cm^2))</option>
+                                    </select>
+                                </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </table>
+                    <p align="right">
+                        <input type="submit" name="{{Molecule}}_LineSubmission" onclick="" value="Submit Line Data"/>
+                        <input type="submit" name="{{Molecule}}_Clear" onclick="" value="Remove {{Molecule}}"/>
+                    </p>
+                {% else %}
+                    <p>
+                        {{Molecule}}
+                        <select name="{{Molecule}}_Lines" multiple>
+                            {% for Line in Lines[Molecule] %}
+                                <option value={{Line}}>{{Line}}</option>"
+                            {% endfor %}
+                        </select>
+                        <input type="submit" name="{{Molecule}}_Add_Line" value="Add Line(s)"/>
+                    </p>
+                    <p align="right">
+                        <input type="submit" name="{{Molecule}}_Clear" onclick="" value="Remove {{Molecule}}"/>
+                    </p>
+                {% endif %}
+                </form>
+            {% endfor %}
+            <form action="" method="post">
+                <p align="right">
+                    <input type="submit" name="Run_Inference" value="Run Inference"/>
+                </p>
+            </form>
+        {% endif %}
+    </p>
+
+    <p>
+        Physical Parameters:
+    </p>
+    <table>
+        <tr>
+            <th>Parameter</th>
+            <th>Lower bound || constant</th>
+            <th>Upper bound</th>
+        </tr>
+        <tr>
+            <tr>
+            <td>Final Density</td>
+            {% if "finalDens" in session %}
+                <td> {{ session["finalDens"] }}</td>
+            {% else %}
+                <td> 1.00e5 (Default)</td>
+            {% endif %}
+
+            {% if "finalDens_up" in session %}
+                <td> {{ session["finalDens_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Initial Temperature</td>
+            {% if "initialTemp" in session %}
+                <td> {{ session["initialTemp"] }}</td>
+            {% else %}
+                <td> 10.0 (Default)</td>
+            {% endif %}
+
+            {% if "initialTemp_up" in session %}
+                <td> {{ session["initialTemp_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Cosmic Radiation factor</td>
+            {% if "zeta" in session %}
+                <td> {{ session["zeta"] }}</td>
+            {% else %}
+                <td> 1.0 (Default)</td>
+            {% endif %}
+
+            {% if "zeta_up" in session %}
+                <td> {{ session["zeta_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Radiation field</td>
+            {% if "radfield" in session %}
+                <td> {{ session["radfield"] }}</td>
+            {% else %}
+                <td> 1.0 (Default)</td>
+            {% endif %}
+
+            {% if "radfield_up" in session %}
+                <td> {{ session["radfield_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+
+
+        </tr>
+        <tr>
+            <td>R<sub>out</sub></td>
+            {% if "rout" in session %}
+                <td> {{ session["rout"] }}</td>
+            {% else %}
+                <td> 0.05 (Default)</td>
+            {% endif %}
+
+            {% if "rout_up" in session %}
+                <td> {{ session["rout_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+
+        </tr>
+        <!--<tr>
+            <td>Parameter</td>
+            {% if "Parameter" in session %}
+                <td> {{ session["Parameter"] }}</td>
+            {% else %}
+                <td> Value (Default)</td>
+            {% endif %}
+
+            {% if "Parameter_up" in session %}
+                <td> {{ session["Parameter_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>-->
+    </table>
+{% endblock %}

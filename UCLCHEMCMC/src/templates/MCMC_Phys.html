@@ -1,0 +1,122 @@
+{% extends "baseTemplate.html" %}
+
+{% block title %}
+    {{name}}: Inference
+{% endblock %}
+
+{% block active %}
+    <a class="active" href="/MCMCInference">Inference</a>
+{% endblock %}
+
+{% block content %}
+    <h2>
+        Physical Parameter Verification:
+    </h2>
+    <p>
+        Please verify that these are the parameters, and ranges, with which the MCMC inference should proceed, as they may have
+        been changed to conform to the upper and lower bounds allowed by {{name}}.
+    </p>
+    <table>
+        <tr>
+            <th>Parameter</th>
+            <th>Lower bound || constant</th>
+            <th>Upper bound</th>
+        </tr>
+        <tr>
+            <td>Final Density</td>
+            {% if "finalDens" in session %}
+                <td> {{ session["finalDens"] }}</td>
+            {% else %}
+                <td> 1.00e5 (Default)</td>
+            {% endif %}
+
+            {% if "finalDens_up" in session %}
+                <td> {{ session["finalDens_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Initial Temperature</td>
+            {% if "initialTemp" in session %}
+                <td> {{ session["initialTemp"] }}</td>
+            {% else %}
+                <td> 10.0 (Default)</td>
+            {% endif %}
+
+            {% if "initialTemp_up" in session %}
+                <td> {{ session["initialTemp_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Cosmic Radiation factor</td>
+            {% if "zeta" in session %}
+                <td> {{ session["zeta"] }}</td>
+            {% else %}
+                <td> 1.0 (Default)</td>
+            {% endif %}
+
+            {% if "zeta_up" in session %}
+                <td> {{ session["zeta_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Radiation field</td>
+            {% if "radfield" in session %}
+                <td> {{ session["radfield"] }}</td>
+            {% else %}
+                <td> 1.0 (Default)</td>
+            {% endif %}
+
+            {% if "radfield_up" in session %}
+                <td> {{ session["radfield_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+
+
+        </tr>
+        <tr>
+            <td>R<sub>out</sub></td>
+            {% if "rout" in session %}
+                <td> {{ session["rout"] }}</td>
+            {% else %}
+                <td> 0.05 (Default)</td>
+            {% endif %}
+
+            {% if "rout_up" in session %}
+                <td> {{ session["rout_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+
+        </tr>
+        <!--<tr>
+            <td>Parameter</td>
+            {% if "Parameter" in session %}
+                <td> {{ session["Parameter"] }}</td>
+            {% else %}
+                <td> Value (Default)</td>
+            {% endif %}
+
+            {% if "Parameter_up" in session %}
+                <td> {{ session["Parameter_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>-->
+    </table>
+    <p>
+        Are these parameters correct?
+    </p>
+    <form action="" method="post">
+        <p align="right">
+            <input type="button" onclick="location.href = /MCMCInference/" value="No, Reset."/>
+            <input type="submit" value="Correct!"/>
+        </p>
+    </form>
+{% endblock %}

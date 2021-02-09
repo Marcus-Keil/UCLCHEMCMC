@@ -89,7 +89,7 @@ MCMCNumberProcesses = 3
 BaseUIFolder = "./"
 ResultsFolder = "../results/"
 DBLocation = "../data/Database.db"
-
+SaveFolder = "../saves/"
 
 
 # Currently unused parameters
@@ -181,7 +181,7 @@ def Index():
 def MCMC():
     if request.method == "POST":
         if 'Load_Session' in request.form and request.form['Session_name'] != '':
-            SessionName = request.form['Session_name']
+            SessionName = SaveFolder + request.form['Session_name']
             if os.path.isfile(SessionName + ".bak"):
                 with shelve.open(SessionName) as db:
                     for key in db.keys():
@@ -326,9 +326,9 @@ def Options():
             session["StepsPerSave"] = 2
         else:
             session["StepsPerSave"] = 1
-        session["SessionBackend"] = request.form["SessionBackend"] + ".h5"
+        session["SessionBackend"] = SaveFolder + request.form["SessionBackend"] + ".h5"
         if session["SessionBackend"] == ".h5":
-            session["SessionBackend"] = "MCMCBackend_Session_" + str(calendar.timegm(time.gmtime())) + ".h5"
+            session["SessionBackend"] = SaveFolder + "MCMCBackend_Session_" + str(calendar.timegm(time.gmtime())) + ".h5"
         with shelve.open(session["SessionBackend"][:-3]) as db:
             for key in session.keys():
                 db[key] = session[key]

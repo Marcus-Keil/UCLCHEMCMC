@@ -1,0 +1,231 @@
+{% extends "baseTemplate.html" %}
+
+{% block stylesBlock %}
+    .progress {
+        width: 100%;
+        text-align: center;
+    }
+{% endblock%}
+{% block title %}
+    {{name}}: Results
+{% endblock %}
+
+{% block active %}
+    <a class="active" href="/Results">Inference</a>
+{% endblock %}
+
+{% block content %}
+    <h2>
+        MCMC Inference
+    </h2>
+    <h3>To start the inference, press the button bellow. <br>
+        Upon finishing the page will reload with the updated results.
+    </h3>
+    <button id="start-bg-job">Start MCMC Inference</button><br><br>
+    <div id="progress"></div>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/nanobar/0.2.1/nanobar.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+    <script> $("start-bg-job").attr("disabled", false)</script>
+    <script>
+        function start_long_task() {
+            // add task status elements
+            $('#start-bg-job').attr("disabled", true)
+            div = $('<div class="progress"><div></div><div>0%</div><div>...</div><div>&nbsp;</div></div><hr>');
+            $('#progress').append(div);
+
+            // create a progress bar
+            var nanobar = new Nanobar({
+                bg: '#44f',
+                target: div[0].childNodes[0]
+            });
+
+            // send ajax POST request to start background job
+            $.ajax({
+                type: 'POST',
+                url: '/MCMCInference/Results/longtask',
+                success: function(data, status, request) {
+                    status_url = request.getResponseHeader('Location');
+                    update_progress(status_url, nanobar, div[0]);
+                },
+                error: function() {
+                    alert('Unexpected error');
+                }
+            });
+        }
+        function update_progress(status_url, nanobar, status_div) {
+            // send GET request to status URL
+            $.getJSON(status_url, function(data) {
+                // update UI
+                percent = parseInt((data['current'] ) * 100 / data['total']);
+                nanobar.go(percent);
+                $(status_div.childNodes[1]).text(percent + '%');
+                $(status_div.childNodes[2]).text(data['status']);
+
+                if (data['state'] != 'PENDING' && data['state'] != 'PROGRESS') {
+                    if ('result' in data) {
+                        // show result
+                        $('#start-bg-job').attr("disabled", false);
+                        location.reload();
+                    }
+                    else {
+                        // something unexpected happened
+                        $('#start-bg-job').attr("disabled", false);
+                        $(status_div.childNodes[3]).text('Result: ' + data['state']);
+
+                    }
+                }
+                else if (data['state'] == 'PROGRESS') {
+                    setTimeout(function() {
+                        update_progress(status_url, nanobar, status_div);
+                    }, 2000);
+                }
+                else {
+                    // rerun in 2 seconds
+                    setTimeout(function() {
+                        update_progress(status_url, nanobar, status_div);
+                    }, 2000);
+                }
+            });
+        }
+        $(function() {
+            $('#start-bg-job').click(start_long_task)
+        });
+    </script>
+    <h3>Results will be shown in this plot</h3>
+    <p>
+        Results shown in the plot prior to running the inference, are the starting positions of the mcmc if
+        it is a new session. If an old session has been loaded successfully then the plot shows the last sessions
+        results up to this point.
+
+    </p>
+    {{ Tag | safe }}
+    <script>{{ JS | safe }}</script>
+    <h2> UCLCHEM Parameters and User Input</h2>
+    <h3> You chose the following options for the MCMC:</h3>
+    <p>
+        Grid: {{ session["Grid"] }} <br>
+        Emulator: {{ session["Emulator"] }} <br>
+        Informed Starting Positions: {{ session["Informed"] }} <br>
+        Session Name: {{ session["SessionBackend"] }}
+    </p>
+    <h3> The Parameters used for UCLCHEM are as follows:</h3>
+    <table>
+        <tr>
+            <th>Parameter</th>
+            <th>Lower bound || constant</th>
+            <th>Upper bound</th>
+        </tr>
+        <tr>
+            <td>Final Density</td>
+            {% if "finalDens" in session %}
+                <td> {{ session["finalDens"] }}</td>
+            {% else %}
+                <td> 1.00e5 (Default)</td>
+            {% endif %}
+
+            {% if "finalDens_up" in session %}
+                <td> {{ session["finalDens_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Initial Temperature</td>
+            {% if "initialTemp" in session %}
+                <td> {{ session["initialTemp"] }}</td>
+            {% else %}
+                <td> 10.0 (Default)</td>
+            {% endif %}
+
+            {% if "initialTemp_up" in session %}
+                <td> {{ session["initialTemp_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Zeta factor</td>
+            {% if "zeta" in session %}
+                <td> {{ session["zeta"] }}</td>
+            {% else %}
+                <td> 1.0 (Default)</td>
+            {% endif %}
+
+            {% if "zeta_up" in session %}
+                <td> {{ session["zeta_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td>Radiation field</td>
+            {% if "radfield" in session %}
+                <td> {{ session["radfield"] }}</td>
+            {% else %}
+                <td> 1.0 (Default)</td>
+            {% endif %}
+
+            {% if "radfield_up" in session %}
+                <td> {{ session["radfield_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+
+
+        </tr>
+        <tr>
+            <td>R<sub>out</sub></td>
+            {% if "rout" in session %}
+                <td> {{ session["rout"] }}</td>
+            {% else %}
+                <td> 0.05 (Default)</td>
+            {% endif %}
+
+            {% if "rout_up" in session %}
+                <td> {{ session["rout_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+
+        </tr>
+        <!--<tr>
+            <td>Parameter</td>
+            {% if "Parameter" in session %}
+                <td> {{ session["Parameter"] }}</td>
+            {% else %}
+                <td> Value (Default)</td>
+            {% endif %}
+
+            {% if "Parameter_up" in session %}
+                <td> {{ session["Parameter_up"] }}</td>
+            {% else %}
+                <td> Constant</td>
+            {% endif %}
+        </tr>-->
+    </table>
+
+    <h3> The provided Observations are as follows: </h3>
+    <p>
+        {% for Molecule in session["outSpecies"] %}
+            {% if Molecule in session %}
+                <table>
+                    <tr stle="background-color: hsl(0, 0%, 45%)">
+                        <td>{{Molecule}}</td>
+                        <td> Intensity ()</td>
+                        <td> Error estimate </td>
+                    </tr>
+                    {% for Line in session[Molecule] %}
+                        {% set Int = Molecule+"_"+Line+"_Int" %}
+                        {% set ER = Molecule+"_"+Line+"_ER" %}
+                        <tr>
+                            <td>{{ Line }}</td>
+                            <td>{{session[Int]}}</td>
+                            <td>{{session[ER]}}</td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            {% endif %}
+            <br>
+        {% endfor %}
+    </p>
+{% endblock %}
