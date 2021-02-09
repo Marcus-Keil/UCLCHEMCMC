@@ -1,5 +1,5 @@
 import os
-import SpectralRadex.radex as radex
+import SpectralRadex as radex
 import numpy as np
 import pandas as pd
 import sqlite3 as sql
@@ -46,9 +46,9 @@ def UCLChemDataFrames(UCLChemDict, outSpecies, Test=False):
     parameterArray = listOfArrays[0]
     chemicalAbunArray = listOfArrays[1]
     if Test:
-        UCLChemDict['outputFile'] = '/home/marcus/Git/UCLCHEM-database/dataBaseScripts/UCLChem_Outputs/out.dat'
-        UCLChemDict['abundFile'] = '/home/marcus/Git/UCLCHEM-database/dataBaseScripts/UCLChem_Outputs/abun.dat'
-        UCLChemDict['columnFile'] = '/home/marcus/Git/UCLCHEM-database/dataBaseScripts/UCLChem_Outputs/col.dat'
+        UCLChemDict['outputFile'] = '../results/out.dat'
+        UCLChemDict['abundFile'] = '../results/abun.dat'
+        UCLChemDict['columnFile'] = '../results/col.dat'
         uclchem.general(dictionary=UCLChemDict, outspeciesin=UniqueOutSpecies)
     if UCLChemDict["finalOnly"]:
         stepCount[0] = 1
@@ -148,6 +148,7 @@ def runRadex(RadexParamDict, Queue=True):
                              dataFrame["QN Lower"].iloc[i].replace("_", ",") + "(" + \
                              str(dataFrame["freq"].iloc[i]) + \
                              " GHz)"
+            # Name, T_r, Intensity, Flux
             OutputList += [[TransitionName, dataFrame["T_R (K)"].iloc[i],
                             dataFrame["FLUX (K*km/s)"].iloc[i], dataFrame["FLUX (erg/cm2/s)"].iloc[i]]]
     OutputArray = np.asarray(OutputList)

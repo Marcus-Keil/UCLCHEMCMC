@@ -145,6 +145,7 @@ def plotLastCornerWebUI(MCMCSaveFile, changingParamsKeys, GridDictionary, PDLine
                         UserRangesDict, knownParams, DBLocation, RangesDict, startingPos):
     PDLines = pd.read_json(PDLinesJson)
     startingPosArray = np.asarray(startingPos.copy())
+    nwalkers, ndim = startingPosArray.shape
     for keys in GridDictionary.keys():
         GridDictionary[keys] = np.asarray(GridDictionary[keys])
 
@@ -309,9 +310,10 @@ def make_Grid(ndim, flat_samples, ParameterNames):
     return grid
 
 
-def CornerPlots(SessionName, Parameters, FileName, ParameterRanges=np.array([[-1]]),
+def CornerPlots(SessionName, Parameters, ParameterRanges=np.array([[-1]]),
                 GridType='Coarse', BurnIn=-1, PlotChains = False,
                 CornerPackagePlot=False, PlotGivenValues=False, GivenValues=[]):
+    FileName = SessionName[:-3]
     if PlotGivenValues and (GivenValues == [] or len(Parameters) != len(GivenValues)):
         print("You must set GivenValues to have the same number of entries as Parameters, if you set PlotGivenValues to True")
         return
@@ -344,6 +346,8 @@ def CornerPlots(SessionName, Parameters, FileName, ParameterRanges=np.array([[-1
                 ax.set_yscale('log')
             else:
                 ax.set_yscale('linear')
+            if PlotGivenValues:
+                ax.axhline(GivenValues[i], color='b', linestyle='solid', linewidth=3, alpha=0.2)
             ax.yaxis.set_label_coords(-0.1, 0.5)
         axes[-1].set_xlabel("step number")
         plt.savefig(FileName + "_Chain.png")
@@ -406,11 +410,11 @@ def CornerPlots(SessionName, Parameters, FileName, ParameterRanges=np.array([[-1
                         weights = np.ones_like(xValues) / len(xValues)
                         if Parameters[j] == "rout" or Parameters[j] == "finalDens":
                             hist, edges = np.histogram(xValues, density=True,
-                                                       bins=np.unique(xValues))
+                                                       bins=np.shape(np.unique(xValues))[0])
                             axs[i, j].hist(xValues, weights=weights, bins=np.unique(xValues))
                         else:
                             hist, edges = np.histogram(xValues, density=True,
-                                                       bins=np.unique(flat_samples[:, j]))
+                                                       bins=np.shape(np.unique(xValues))[0])
                             axs[i, j].hist(xValues, weights=weights, bins=np.unique(xValues))
                         if PlotGivenValues:
                             axs[i, j].axvline(GivenValues[j], color='k', linestyle='dashed', linewidth=1)

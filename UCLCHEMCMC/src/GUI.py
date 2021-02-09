@@ -5,8 +5,12 @@ import numpy as np
 import pandas as pd
 import billiard.pool as BilPool
 from celery import Celery
+from bokeh.resources import CDN
+from bokeh.plotting import figure
+from bokeh.embed import autoload_static
 from flask import Flask, request, render_template, session, redirect, \
     url_for, jsonify
+import json
 import calendar
 import time
 
@@ -17,11 +21,15 @@ import MCFunctions as mcf
 
 # Celery and Flask Initiations
 # =========================================================================================================
-
 app = Flask(__name__)
 app.secret_key = "jjdd"
+
+# Things marked with these lines are examples for Celery
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Celery configuration
 app.config['CELERY_BROKER_URL'] = 'redis://localhost:6379/0'
 app.config['CELERY_RESULT_BACKEND'] = 'redis://localhost:6379/0'
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Initialize Celery
 celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
@@ -31,24 +39,22 @@ celery.conf.update(app.config)
 # Parameter declarations, for now hard coded, will be exported to a file that can be changed
 # at the end.
 # =========================================================================================================
+
 CodeName = 'UCLCHEMCMC'
+#Lines = {"CO": ['1-0', '2-1'], "HCO+": ['(2,1)-(2,0)', '(2,2)-(2,1)']}
+#Chemicals = ['CO', 'HCO+', ' ']
 
-ResultsFolder = "../results/"
-DBLocation = "../data/Database.db"
 ChemFile = "../data/Chemicals.csv"
-RangesFile = "../data/Range.csv"
-
 Chem = pd.read_csv(ChemFile, delimiter=",/", engine='python')
 Lines = Chem.set_index('Chemical')["Lines"].to_dict()
-del Chem
 for C in Lines.keys():
     Lines[C] = np.asarray(Lines[C].split(", ")).astype(str)
-
 Chemicals = list(Lines.keys())
 Chemicals += ['']
 
 
 # File that contains the Ranges that are allowed
+RangesFile = "../data/Range.csv"
 Ranges = pd.read_csv(RangesFile, delimiter=":", engine='python')
 ParameterRanges = Ranges.set_index("key")['value'].to_dict()
 
@@ -76,9 +82,16 @@ ParameterDefaults = {'finalDens': 1.0e5,
 MCMCwalkers = 10
 MCMCStepsPerRun = 200
 MCMCStepsPerItteration = 10
-MCMCNumberProcesses = 6
 ManagerPoolSize = 1
 FortranPoolSize = 2
+
+MCMCNumberProcesses = 3
+BaseUIFolder = "./"
+ResultsFolder = "../results/"
+DBLocation = "../data/Database.db"
+
+
+
 # Currently unused parameters
 # 'phase', 'switch', 'collapse', 'desorb', 'initialDens', 'initialDens_up',
 # 'maxTemp', 'maxTemp_up',
@@ -352,7 +365,7 @@ def Results():
             else:
                 BaseDict[key] = session[key]
         elif key == "Grid":
-            GridFile = "/home/marcus/Git/UCLCHEM-Database/dataBaseScripts/" + session["Grid"] + "_Grid.csv"
+            GridFile = "../data/" + session["Grid"] + "_Grid.csv"
             Grid = pd.read_csv(GridFile, delimiter=",/", engine='python')
             GridDictionary = Grid.set_index('Parameter')["Grid"].to_dict()
             for P in GridDictionary.keys():
