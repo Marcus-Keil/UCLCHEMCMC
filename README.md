@@ -5,18 +5,45 @@ Required Packages
 
 Installation Instructions:
 
-    In directory "/UCLCHEMCMC/src/UCLCHEM/src/" call "make" followed by "make python" 
-    move the resulting "uclchem.so" file from "/UCLCHEMCMC/src/UCLCHEM/" to 
-    "/UCLCHEMCMC/src/".
+Compile UCLCHEM:
+In directory 
 
-    In directory "/UCLCHEMCMC/src/SpectralRadex/" call "pip install ."
+    /UCLCHEMCMC/src/UCLCHEM/src/ 
 
-    In directory "/UCLCHEMCMC/" call "pip install ." if you want to make changes to
-    UCLCHEMCMC we recommend the command "pip install -e ." instead
+call 
+
+    make
+    make python
+
+Once this completes, take the "uclchem.so" file from 
+
+    /UCLCHEMCMC/src/UCLCHEM/
+
+to 
+
+    /UCLCHEMCMC/src/
+
+Compile Spectral Radex:
+In directory 
+
+    /UCLCHEMCMC/src/SpectralRadex/radex/src
+
+call 
+
+    make
+    make python
 
 To Run UCLCHEMCMC:
+In directory 
 
-    In directory "/UCLCHEMCMC/" call "bash runUCLCHEMCMC.sh" making sure to type in
-    the sudo password for the initial terminal. Upon finishing that, proceed to 
-    opening a browser and going to address "http://localhost:5000/" and follow
-    the instructions there.
+    /UCLCHEMCMC/
+
+call
+
+    bash runUCLCHEMCMC.sh
+
+Upon finishing that, open a browser and go to following address 
+
+    http://localhost:5000/
+
+From here, the user interface should guide the user on how to proceed.
