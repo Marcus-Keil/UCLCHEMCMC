@@ -3,4 +3,4 @@
 
 gnome-terminal -- bash -c "celery worker -A GUI.celery --loglevel=info"
 gnome-terminal -- bash -c "python GUI.py"
-sudo bash ./run-redis.sh
+bash ./run-redis.sh

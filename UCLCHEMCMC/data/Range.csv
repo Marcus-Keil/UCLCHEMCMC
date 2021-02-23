@@ -3,9 +3,9 @@ key:value
 "finalDens_high":1.0e9
 "initialTemp_low":5
 "initialTemp_high":30
-"zeta_low":1
+"zeta_low":0.01
 "zeta_high":10000
-"radfield_low":1
+"radfield_low":0.01
 "radfield_high":1.0e4
 "rout_low":0.0001
 "rout_high":10

@@ -64,9 +64,15 @@ PhysicalParameters = ['finalDens', 'finalDens_up', 'initialTemp', 'initialTemp_u
                       'rout', 'rout_up']
 
 # The parameters currently not allowd to be changed, but are needed
-UnchangableParams = {"phase": 1, "switch": 1, "collapse": 1, "readAbunds": 0,
-                     "writeStep": 1, "points": 1, "desorb": 1, "finalOnly": "True", 'fr': 1.0}
+UnchangableParams = {"phase": 1, "switch": 1, "collapse": 1, "readAbunds": 0, "writeStep": 1, "points": 1, "desorb": 1,
+                     "finalOnly": "True", 'fr': 1.0}
 
+UCLCHEMParams = ["switch", "collapse", "desorb", "initialDens", "finalDens", "initialTemp", "maxTemp", "zeta",
+                 "radfield", "rin", "rout", "fr", "currentTime", "finalTime"]
+UCLCHEMDefaults = {"switch": 0, "collapse": 1, "desorb": 1, "initialDens": 1.00e2, "finalDens": 1.00e5,
+                   "initialTemp": 10.0, "maxTemp": 300.0, "zeta": 1, "radfield": 1, "rin": 0, "rout": 0.05,
+                   "fr": 1, "currentTime":0.0, "finalTime": 1.0e7}
+Switches = ["switch", "collapse", "desorb"]
 # Default parameter values if nothing is specified
 ParameterDefaults = {'finalDens': 1.0e5,
                      'initialTemp': 10,
@@ -88,7 +94,6 @@ FortranPoolSize = 2
 MCMCNumberProcesses = 3
 BaseUIFolder = "./"
 ResultsFolder = "../results/"
-DBLocation = "../data/Database.db"
 SaveFolder = "../saves/"
 
 
@@ -104,10 +109,9 @@ SaveFolder = "../saves/"
 def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
             MCMCFile, GridDictionary, Emulator=False, Informed=False, Walkers=MCMCwalkers,
             StepsPerClick=MCMCStepsPerRun, StepsPerSave=MCMCStepsPerItteration):
-    OutSpecies = BaseDict["outSpecies"]
     for keys in GridDictionary.keys():
         GridDictionary[keys] = np.asarray(GridDictionary[keys])
-    BaseDict["outSpecies"] = len(OutSpecies)
+    BaseDict["outSpecies"] = len(utils.UniqueOutSpecieslist)
     UserRangesDict = {}
     for ind, RangeLim in enumerate(ChangingParamList):
         low = ChangingDictRanges[RangeLim+"_low"]
@@ -121,7 +125,7 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
             upGrid += 1
         UserRangesDict[RangeLim+"_up"] = upGrid
         if Informed:
-            startPoints = utils.createGausStartingPointsGrid(PDLinesJson, ChangingParamList, DBLocation, Walkers, GridDictionary)
+            startPoints = utils.createGausStartingPointsGrid(PDLinesJson, ChangingParamList, Walkers, GridDictionary)
             for i in range(len(startPoints)):
                 if startPoints[i] < lowGrid:
                     startPoints[i] = lowGrid
@@ -144,7 +148,7 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
     for i in range(iterations):
         sampler = MCMCFunction(MCMCFile, MCMCNumberProcesses, len(ChangingParamList), Walkers,
                                StepsPerSave, BaseDict, ChangingParamList, startPoints,
-                               DBLocation, GridDictionary, ParameterRanges, PDLinesJson,
+                               GridDictionary, ParameterRanges, PDLinesJson,
                                UserRangesDict)
         js, tag = mcf.plotChainAndCornersWebUI(sampler, len(ChangingParamList), ChangingParamList, GridDictionary, UserRangesDict)
         self.update_state(state='PROGRESS', meta={'current': i+1, 'total': iterations,
@@ -155,7 +159,7 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
     for i in range(FortranPoolSize):
         mcf.FortranQueue.put(("Stop", []))
         time.sleep(2)
-    mcf.Queue.put(("Stop", []))
+    mcf.SQLQueue.put(("Stop", []))
     FortranPool.close()
     FortranPool.join()
     ManagerPool.close()
@@ -167,10 +171,43 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
 # =========================================================================================================
 
 
+# The celery task, wip.
+# =========================================================================================================
+@celery.task(bind=True)
+def RunUCLCHEMAlone(self, UCLCHEMDict):
+    UCLCHEMDict["phase"] = int(1)
+    UCLCHEMDict["switch"] = int(UCLCHEMDict["switch"])
+    UCLCHEMDict["collapse"] = int(UCLCHEMDict["collapse"])
+    UCLCHEMDict["desorb"] = int(UCLCHEMDict["desorb"])
+    UCLCHEMDict["readAbunds"] = int(0)
+    UCLCHEMDict["writeStep"] = int(1)
+    UCLCHEMDict["points"] = int(1)
+    UCLCHEMDict["finalOnly"] = "True"
+    UCLCHEMDict["outSpecies"] = len(utils.UniqueOutSpecieslist)
+    ManagerPool = BilPool.Pool(ManagerPoolSize, utils.worker_main)
+    FortranPool = BilPool.Pool(FortranPoolSize, utils.worker_Fortran)
+    self.update_state(state='PROGRESS', meta={'current': 1, 'total': 2, 'status': "completed UCLCHEM, joining workers"})
+    PhysDF, ChemDF = utils.UCLChemDataFrames(UCLCHEMDict)
+    for i in range(FortranPoolSize):
+        mcf.FortranQueue.put(("Stop", []))
+        time.sleep(2)
+    mcf.SQLQueue.put(("Stop", []))
+    FortranPool.close()
+    FortranPool.join()
+    ManagerPool.close()
+    ManagerPool.join()
+    PhysDF.to_html('templates/UCLCHEMPhysResults.html')
+    ChemDF.to_html('templates/UCLCHEMChemResults.html')
+    self.update_state(state='COMPLETE', meta={'current': 1, 'total': 2, 'status': "Task complete!"})
+    return {'current': 2, 'total': 2, 'status': 'Task completed!', 'result': 'UCLCHEMChemResults.html'}
+# =========================================================================================================
+
+
 # Home or Index Page
 # =========================================================================================================
 @app.route('/')
 def Index():
+    session.clear()
     return render_template('index.html', name=CodeName)
 # =========================================================================================================
 
@@ -243,7 +280,7 @@ def MCMCChem():
         session["outSpecies"] = []
 
     if request.method == "POST":
-        session["Error"] = " "
+        session["Error"] = ""
         if "Add_Mol" in request.form and request.form["AddSpecies"] != '':
             molecule = request.form["AddSpecies"]
             session["outSpecies"] += [molecule]
@@ -302,6 +339,39 @@ def MCMCChem():
     else:
         session["Error"] = " "
         return render_template('MCMC_Chem.html', name=CodeName, Chemicals=NewChem, Lines=Lines, session=session)
+# =========================================================================================================
+
+
+# =========================================================================================================
+@app.route('/UCLCHEM/', methods=["POST", "GET"])
+def UCLCHEM():
+    UCLCHEMDict = {}
+    for parameter in UCLCHEMParams:
+        UCLCHEMDict[parameter] = UCLCHEMDefaults[parameter]
+    if request.method == "POST":
+        parameter = 0
+        while parameter < (len(UCLCHEMParams)):
+            if request.form[UCLCHEMParams[parameter]] != '':
+                if UCLCHEMParams[parameter] in Switches:
+                    UCLCHEMDict[UCLCHEMParams[parameter]] = int(request.form[UCLCHEMParams[parameter]])
+                else:
+                    UCLCHEMDict[UCLCHEMParams[parameter]] = float(request.form[UCLCHEMParams[parameter]])
+                session[UCLCHEMParams[parameter]] = UCLCHEMDict[UCLCHEMParams[parameter]]
+            parameter += 1
+    session["UCLCHEMDict"] = UCLCHEMDict
+    return render_template('UCLCHEM.html', name=CodeName, session=session)
+# =========================================================================================================
+
+
+# =========================================================================================================
+@app.route('/UCLCHEM/PhysResults', methods=["GET"])
+def UCLCHEMPhysResults():
+    return render_template('UCLCHEMPhysResults.html', name=CodeName, session=session)
+
+
+@app.route('/UCLCHEM/ChemResults', methods=["GET"])
+def UCLCHEMChemResults():
+    return render_template('UCLCHEMChemResults.html', name=CodeName, session=session)
 # =========================================================================================================
 
 
@@ -406,11 +476,48 @@ def Results():
         GridDictionary[keys] = (GridDictionary[keys]).tolist()
     session["GridDictionary"] = GridDictionary
     js, tag = mcf.plotLastCornerWebUI(session["SessionBackend"], ChangingParamList, session["GridDictionary"],
-                                      PDLines.to_json(), UserRangesDict, BaseDict, DBLocation,
+                                      PDLines.to_json(), UserRangesDict, BaseDict,
                                       ParameterRanges, startPoints)
     if request.method == 'GET':
         return render_template('Results.html', name=CodeName, Lines=Lines, session=session, JS=js, Tag=tag)
     return redirect(url_for('Results'))
+
+
+@app.route('/UCLCHEM/UCLCHEMTask', methods=['POST'])
+def UCLCHEMTask():
+    UCLCHEMDict = session["UCLCHEMDict"]
+    task = RunUCLCHEMAlone.apply_async(args=[UCLCHEMDict])
+    return jsonify({}), 202, {'Location': url_for('UCLCHEMTaskStatus', task_id=task.id)}
+
+
+@app.route('/UCLCHEM/status/<task_id>')
+def UCLCHEMTaskStatus(task_id):
+    task = RunUCLCHEMAlone.AsyncResult(task_id)
+    if task.state == 'PENDING':
+        response = {
+            'state': task.state,
+            'current': 0,
+            'total': 2,
+            'status': 'Pending...'
+        }
+    elif task.state != 'FAILURE':
+        response = {
+            'state': task.state,
+            'current': task.info.get('current', 0),
+            'total': task.info.get('total', 1),
+            'status': task.info.get('status', '')
+        }
+        if 'result' in task.info:
+            response['result'] = task.info['result']
+    else:
+        # something went wrong in the background job
+        response = {
+            'state': task.state,
+            'current': 2,
+            'total': 2,
+            'status': str(task.info)
+        }
+    return jsonify(response)
 
 
 @app.route('/MCMCInference/Results/longtask', methods=['POST'])

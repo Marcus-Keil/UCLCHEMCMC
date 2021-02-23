@@ -11,6 +11,7 @@ IMPLICIT NONE
     CHARACTER (LEN=100):: paramFile, buffer,label
     CHARACTER (LEN=100):: abundFile,outputFile,columnFile
     LOGICAL :: columnFileRead=.False.
+    
     !All model parameters are given a default value in paramters.f90
     !Full explanations of those parameters in the comments of that file
     INCLUDE 'defaultparameters.f90'
@@ -53,7 +54,4 @@ IMPLICIT NONE
             if (points .gt. 1)currentTime=currentTimeold
         END DO
     END DO 
-    close(10)
-    close(11)
-    close(7)
 END PROGRAM uclchem

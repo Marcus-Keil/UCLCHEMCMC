@@ -42,7 +42,7 @@ phase=1;
 !non-thermal Desorption. Turn it all on/offwith desorb. Can also turn off h2, cosmic ray induced and uv induced individually.
 desorb=1;
 h2desorb=1;crdesorb=1;uvdesorb=1 !Non-thermal desorption methods (roberts et al. 2007)
-thermdesorb=1 !continuous thermal desorption -not currently recommended so turned off by default.
+thermdesorb=0 !continuous thermal desorption -not currently recommended so turned off by default.
 
 !Set to 1 to immediately add all grain surface material to gas phase.
 instantSublimation=0
@@ -60,13 +60,10 @@ tempindx=3
 vs=40.0
 
 !initial fractional abundances of elements(from Asplund et al. 2009 ARAA table 1 -SOLAR)
-!note fh is fraction of H initially in H atoms. Total H is always 1.
-fh=0.5;fhe = 0.1;fc  = 2.6d-04;fo  = 4.6d-04;fn  = 6.1d-05
+fh=0.0;fhe = 0.1;fc  = 2.6d-04;fo  = 4.6d-04;fn  = 6.1d-05
 fs  = 1.318d-05;fmg = 3.981d-05;fsi = 1.0d-07;fcl = 3.162d-07;
 fp=2.57d-09 ; ff = 3.6d-08 !fp depleted 1/100 of solar
 
-! These elements are not typically used. We do not recommend any particular value
-fd=0.0;fli=0.0;fna=0.0;fpah=0.0;f15n=0.0;f13c=0.0;f18O=0.0
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !Input and output Files
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -85,7 +82,7 @@ writeStep=1
 !If readAbund=0, final abundances are written to abundFile
 abundFile="output/start.dat"
 !Full output written to outputFlie
-outputFile="output/full2.dat"
+outputFile="output/full.dat"
 !columnated output of time,dens,temp and outSpecies written to column file
 columnFile='output/column.dat'
 

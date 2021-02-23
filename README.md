@@ -1,3 +1,7 @@
+Required Packages
+
+'pandas', 'numpy', 'corner', 'matplotlib', 'emcee', 'billiard', 'bokeh', 'flask', 'celery'
+
 
 Installation Instructions:
 

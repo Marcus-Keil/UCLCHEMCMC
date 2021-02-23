@@ -12,10 +12,10 @@ import os
 
 
 reactionFile = 'inputFiles/umist12-ucledit.csv'
-reactionFile_grain = 'inputFiles/default_grain_network.csv'
-speciesFile = 'inputFiles/default_species.csv'
+reactionFile_grain = 'inputFiles/uclgrainbasic.csv'
+speciesFile = 'inputFiles/uclspeciesbasic.csv'
 
-therm_flag=True
+therm_flag=False
 
 if not os.path.exists('outputFiles'):
     os.makedirs('outputFiles')
@@ -42,7 +42,7 @@ reactionList=add_desorb_reactions(speciesList,reactionList,therm_flag=therm_flag
 
 #Keep only the species that are involved in the final reaction list
 print('\nRemoving unused species...')
-speciesList = check_and_filter_species(speciesList,reactionList)
+speciesList = filter_species(speciesList,reactionList)
 
 #Print dropped reactions from grain file or write if many
 if len(dropped_reactions)<6:
@@ -57,6 +57,11 @@ else:
 		writer.writerow(reaction)
 	f.close()
 
+#TODO replace this with an atom counter
+# Calculate the molecular mass and elemental constituents of each species
+print('Calculating molecular masses and elemental constituents...')
+speciesList = find_constituents(speciesList)
+
 #sort the species file according to mass
 print('Sorting species by mass...')
 speciesList.sort(key=lambda x: int(x.mass))
@@ -66,9 +71,6 @@ speciesList[-1].n_atoms=1
 #check reactions to see if there are potential problems
 print("Checking reactions...")
 reaction_check(speciesList,reactionList)
-
-
-reactionList=sorted(reactionList,key=lambda x: x.reac_type)
 
 print('\n################################################')
 print('Checks complete, writing output files')

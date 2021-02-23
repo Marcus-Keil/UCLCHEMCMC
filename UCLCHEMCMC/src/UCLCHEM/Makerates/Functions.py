@@ -1,6 +1,6 @@
 from __future__ import print_function
 import csv
-import numpy as np
+import numpy
 
 #functions including
 #1. simple classes to store all the information about each species and reaction.
@@ -12,12 +12,6 @@ import numpy as np
 #1. simple classes to store all the information about each species and reaction.
 #largely just to make the other functions more readable.
 ##########################################################################################
-reaction_types=['PHOTON','CRP','CRPHOT','FREEZE','THERM','DESOH2','DESCR','DEUVCR',"CHEMDES","DIFF"]
-#these reaction types removed as UCLCHEM does not handle them. 'CRH','PHOTD','XRAY','XRSEC','XRLYA','XRPHOT'
-elementList=['H','D','HE','C','N','O','F','P','S','CL','LI','NA','MG','SI','PAH','15N','13C','18O']
-elementMass=[1,2,4,12,14,16,19,31,32,35,3,23,24,28,420,15,13,18]
-symbols=['#','+','-','(',')']
-
 class Species:
 	def __init__(self,inputRow):
 		self.name=inputRow[0]
@@ -34,8 +28,172 @@ class Species:
 	def is_ion(self):
 		return (self.name[-1]=="+" or self.name[-1]=="-")
 
-	def find_constituents(self):
-		speciesName=self.name[:]
+class Reaction:
+	def __init__(self,inputRow):
+		self.reactants=[inputRow[0],inputRow[1],self.NANCheck(inputRow[2])]
+		self.products=[inputRow[3],self.NANCheck(inputRow[4]),self.NANCheck(inputRow[5]),self.NANCheck(inputRow[6])]
+		self.alpha=float(inputRow[7])
+		self.beta=float(inputRow[8])
+		self.gamma=float(inputRow[9])
+		self.templow=inputRow[10]
+		self.temphigh=inputRow[11]
+
+	def NANCheck(self,a):
+		aa  = a if a else 'NAN'
+		return aa
+
+reaction_types=['PHOTON','CRP','CRPHOT','FREEZE','CRH','PHOTD','THERM','XRAY','XRSEC','XRLYA','XRPHOT','DESOH2','DESCR','DEUVCR',"CHEMDES","DIFF"]
+elementList=['H','D','HE','C','N','O','F','P','S','CL','LI','NA','MG','SI','PAH','15N']
+elementMass=[1,2,4,12,14,16,19,31,32,35,3,23,24,28,420,15]
+symbols=['#','+','-','(',')']
+
+##########################################################################################
+#2. Functions to read in the species and reaction file and check for sanity
+##########################################################################################
+
+# Read the entries in the specified species file
+def read_species_file(fileName):
+	speciesList=[]
+	f = open(fileName, 'r')
+	reader = csv.reader(f, delimiter=',', quotechar='|')
+	for row in reader:
+		if row[0]!="NAME" and "!" not in row[0] :
+			speciesList.append(Species(row))
+	nSpecies = len(speciesList)
+	return nSpecies,speciesList
+
+# Read the entries in the specified reaction file and keep the reactions that involve the species in our species list
+def read_reaction_file(fileName, speciesList, ftype):
+	reactions=[]
+	dropped_reactions=[]
+	keepList=['','NAN','#','E-','e-','ELECTR']
+	keepList.extend(reaction_types)
+	print(keepList)
+	for species in speciesList:
+		keepList.append(species.name)			                                  
+	if ftype == 'UMIST': # if it is a umist database file
+		f = open(fileName, 'r')
+		reader = csv.reader(f, delimiter=':', quotechar='|')
+		for row in reader:
+			if all(x in keepList for x in [row[2],row[3],row[4],row[5],row[6],row[7]]): #if all the reaction elements belong to the keeplist
+				#umist file doesn't have third reactant so add space and has a note for how reactions there are so remove that
+				reactions.append(Reaction(row[2:4]+['']+row[4:8]+row[9:]))
+	if ftype == 'UCL':	# if it is a ucl made (grain?) reaction file
+		f = open(fileName, 'r')
+		reader = csv.reader(f, delimiter=',', quotechar='|')
+		for row in reader:
+			if all(x in keepList for x in row[0:7]):	#if all the reaction elements belong to the keeplist
+				row[10]=0.0
+				row[11]=10000.0
+				reactions.append(Reaction(row))	
+			else:
+				dropped_reactions.append(row)
+
+	nReactions = len(reactions)
+	return nReactions, reactions, dropped_reactions
+
+def remove_duplicate_species(speciesList):
+		#check for duplicate species
+	duplicates=0
+	duplicate_list=[]
+	for i in range(0,len(speciesList)):
+		for j in range(0,len(speciesList)):
+			if speciesList[i].name==speciesList[j].name:
+				if (j!=i) and speciesList[i].name not in duplicate_list:
+					print("\t {0} appears twice in input species list".format(speciesList[i].name))
+					duplicate_list.append(speciesList[i].name)
+
+	for duplicate in duplicate_list:
+		removed=False
+		i=0
+		while not removed:
+			if speciesList[i].name==duplicate:
+				del speciesList[i]
+				print("\tOne entry of {0} removed from list".format(duplicate))
+				removed=True
+			else:
+				i+=1
+	return speciesList
+
+#Look for possibly incorrect parts of species list
+def filter_species(speciesList,reactionList):
+	#check for species not involved in any reactions
+	lostSpecies=[]
+	for species in speciesList:
+		keepFlag=False
+		for reaction in reactionList:
+			if species.name in reaction.reactants or species.name in reaction.products:
+				keepFlag=True
+		if not keepFlag:
+			lostSpecies.append(species.name)
+			speciesList.remove(species)
+
+	print('\tSpecies in input list that do not appear in final list:')
+	print('\t',lostSpecies)
+	print('\n')
+	return speciesList
+
+#All species should freeze out at least as themselves and all grain species should desorb according to their binding energy
+#This function adds those reactions automatically to slim down the grain file
+def add_desorb_reactions(speciesList,reactionList,therm_flag=False):
+	if therm_flag:
+		desorb_reacs=['DESOH2',"DESCR","DEUVCR","THERM"]
+	else:
+		desorb_reacs=['DESOH2',"DESCR","DEUVCR"]
+
+	for species in speciesList:
+		if species.is_grain_species():
+			for reacType in desorb_reacs:
+				newReaction=Reaction([species.name,reacType,'NAN',species.name[1:],'NAN','NAN','NAN',1,0,species.bindener,0.0,10000.0])
+				reactionList.append(newReaction)
+	return reactionList
+
+#check reactions to alert user of potential issues including repeat reactions
+#and multiple freeze out routes
+def reaction_check(speciesList,reactionList,freeze_check=True):
+
+
+	#first check for multiple freeze outs so user knows to do alphas
+	print("\tSpecies with multiple freeze outs, check alphas:")
+	for spec in speciesList:
+		freezes=0
+		for reaction in reactionList:
+			if (spec.name in reaction.reactants and 'FREEZE' in reaction.reactants):
+				freezes+=1
+		if (freezes>1):
+			print("\t{0} freezes out through {1} routes".format(spec.name,freezes))
+		if freezes<1 and not spec.is_grain_species() and freeze_check:
+			print("\t{0} does not freeze out".format(spec.name,freezes))
+	#now check for duplicate reactions
+	duplicate_list=[]
+	print("\n\tPossible duplicate reactions for manual removal:")
+	duplicates=0
+	for i, reaction1 in enumerate(reactionList):
+		if i not in duplicate_list:
+			for j, reaction2 in enumerate(reactionList):
+				if i!=j:
+					if set(reaction1.reactants)==set(reaction2.reactants):
+						if set(reaction1.products)==set(reaction2.products):
+							print("\tReactions {0} and {1} are possible duplicates".format(i+1,j+1))
+							print("\t",str(i+1), reaction1.reactants, "-->", reaction1.products)
+							print("\t",str(j+1), reaction1.reactants, "-->", reaction2.products)
+							duplicates+=1
+							duplicate_list.append(i)
+							duplicate_list.append(j)
+	
+	if (duplicates==0):
+		print("\tNone")
+
+#capitalize files
+def make_capitals(fileName):
+	a=open(fileName).read()
+	output = open(fileName, mode='w')
+	output.write(a.upper())
+	output.close()
+
+def find_constituents(speciesList):
+	for species in speciesList:
+		speciesName=species.name
 		i=0
 		atoms=[]
 		bracket=False
@@ -101,199 +259,13 @@ class Species:
 				else:
 					i+=1
 
-		self.n_atoms=len(atoms)
+		species.n_atoms=len(atoms)
 		mass=0
 		for atom in atoms:
 			mass+=elementMass[elementList.index(atom)]
-		if mass!=float(self.mass):
-			print(f"Input mass of {self.name} does not match calculated mass of constituents")
-			print("using calculated mass")
-			self.mass=str(mass)
-
-
-class Reaction:
-	def __init__(self,inputRow):
-		self.reactants=[inputRow[0],inputRow[1],self.NANCheck(inputRow[2])]
-		self.products=[inputRow[3],self.NANCheck(inputRow[4]),self.NANCheck(inputRow[5]),self.NANCheck(inputRow[6])]
-		self.alpha=float(inputRow[7])
-		self.beta=float(inputRow[8])
-		self.gamma=float(inputRow[9])
-		self.templow=float(inputRow[10])
-		self.temphigh=float(inputRow[11])
-		self.reac_type=self.get_reaction_type()
-		self.duplicate=False
-
-	def NANCheck(self,a):
-		aa  = a if a else 'NAN'
-		return aa
-
-	def get_reaction_type(self):
-		if (self.reactants[2].strip()=="CHEMDES") or (self.reactants[2].strip()=="DIFF"):
-			return self.reactants[2]
-		else:
-			if self.reactants[1] in reaction_types:
-				return self.reactants[1]
-			else:
-				return "TWOBODY"
-
-	def same_reaction(self,other):
-		if set(self.reactants)==set(other.reactants):
-			if set(self.products)==set(other.products):
-				return True
-		return False
-
-
-##########################################################################################
-#2. Functions to read in the species and reaction file and check for sanity
-##########################################################################################
-
-# Read the entries in the specified species file
-def read_species_file(fileName):
-	speciesList=[]
-	f = open(fileName, 'r')
-	reader = csv.reader(f, delimiter=',', quotechar='|')
-	for row in reader:
-		if row[0]!="NAME" and "!" not in row[0] :
-			speciesList.append(Species(row))
-	nSpecies = len(speciesList)
-	return nSpecies,speciesList
-
-# Read the entries in the specified reaction file and keep the reactions that involve the species in our species list
-def read_reaction_file(fileName, speciesList, ftype):
-	reactions=[]
-	dropped_reactions=[]
-	keepList=['','NAN','#','E-','e-','ELECTR']
-	keepList.extend(reaction_types)
-
-	for species in speciesList:
-		keepList.append(species.name)			                                  
-	if ftype == 'UMIST': # if it is a umist database file
-		f = open(fileName, 'r')
-		reader = csv.reader(f, delimiter=':', quotechar='|')
-		for row in reader:
-			if all(x in keepList for x in [row[2],row[3],row[4],row[5],row[6],row[7]]): #if all the reaction elements belong to the keeplist
-				#umist file doesn't have third reactant so add space and has a note for how reactions there are so remove that
-				reactions.append(Reaction(row[2:4]+['']+row[4:8]+row[9:]))
-	if ftype == 'UCL':	# if it is a ucl made (grain?) reaction file
-		f = open(fileName, 'r')
-		reader = csv.reader(f, delimiter=',', quotechar='|')
-		for row in reader:
-			if all(x in keepList for x in row[0:7]):	#if all the reaction elements belong to the keeplist
-				if row[10]=="":
-					row[10]=0.0
-					row[11]=10000.0
-				reactions.append(Reaction(row))	
-			else:
-				dropped_reactions.append(row)
-
-	nReactions = len(reactions)
-	return nReactions, reactions, dropped_reactions
-
-def remove_duplicate_species(speciesList):
-		#check for duplicate species
-	duplicates=0
-	duplicate_list=[]
-	for i in range(0,len(speciesList)):
-		for j in range(0,len(speciesList)):
-			if speciesList[i].name==speciesList[j].name:
-				if (j!=i) and speciesList[i].name not in duplicate_list:
-					print("\t {0} appears twice in input species list".format(speciesList[i].name))
-					duplicate_list.append(speciesList[i].name)
-
-	for duplicate in duplicate_list:
-		removed=False
-		i=0
-		while not removed:
-			if speciesList[i].name==duplicate:
-				del speciesList[i]
-				print("\tOne entry of {0} removed from list".format(duplicate))
-				removed=True
-			else:
-				i+=1
+		if mass!=float(species.mass):
+			species.mass=str(mass)
 	return speciesList
-
-#Look for possibly incorrect parts of species list
-def check_and_filter_species(speciesList,reactionList):
-	#check for species not involved in any reactions
-	lostSpecies=[]
-	for species in speciesList:
-		keepFlag=False
-		for reaction in reactionList:
-			if species.name in reaction.reactants or species.name in reaction.products:
-				keepFlag=True
-		if not keepFlag:
-			lostSpecies.append(species.name)
-			speciesList.remove(species)
-
-	print('\tSpecies in input list that do not appear in final list:')
-	print('\t',lostSpecies)
-	print('\n')
-	for species in speciesList:
-		species.find_constituents()
-	return speciesList
-
-#All species should freeze out at least as themselves and all grain species should desorb according to their binding energy
-#This function adds those reactions automatically to slim down the grain file
-def add_desorb_reactions(speciesList,reactionList,therm_flag=False):
-	if therm_flag:
-		desorb_reacs=['DESOH2',"DESCR","DEUVCR","THERM"]
-	else:
-		desorb_reacs=['DESOH2',"DESCR","DEUVCR"]
-
-	for species in speciesList:
-		if species.is_grain_species():
-			for reacType in desorb_reacs:
-				newReaction=Reaction([species.name,reacType,'NAN',species.name[1:],'NAN','NAN','NAN',1,0,species.bindener,0.0,10000.0])
-				reactionList.append(newReaction)
-	return reactionList
-
-#check reactions to alert user of potential issues including repeat reactions
-#and multiple freeze out routes
-def reaction_check(speciesList,reactionList,freeze_check=True):
-
-
-	#first check for multiple freeze outs so user knows to do alphas
-	print("\tSpecies with multiple freeze outs, check alphas:")
-	for spec in speciesList:
-		freezes=0
-		for reaction in reactionList:
-			if (spec.name in reaction.reactants and 'FREEZE' in reaction.reactants):
-				freezes+=1
-		if (freezes>1):
-			print("\t{0} freezes out through {1} routes".format(spec.name,freezes))
-		if freezes<1 and not spec.is_grain_species() and freeze_check:
-			print("\t{0} does not freeze out".format(spec.name,freezes))
-
-	#now check for duplicate reactions
-	duplicate_list=[]
-	print("\n\tPossible duplicate reactions for manual removal:")
-	duplicates=False
-	for i, reaction1 in enumerate(reactionList):
-		#if i not in duplicate_list:
-			for j, reaction2 in enumerate(reactionList):
-				if i!=j:
-					if reaction1.same_reaction(reaction2):
-						print("\tReactions {0} and {1} are possible duplicates".format(i+1,j+1))
-						print("\t",str(i+1), reaction1.reactants, "-->", reaction1.products)
-						print("\t",str(j+1), reaction2.reactants, "-->", reaction2.products)
-						duplicates=True
-						#adjust temperatures so temperature ranges are adjacent
-						if reaction1.temphigh > reaction2.temphigh:
-							if reaction1.templow<reaction2.temphigh:
-								print(f"\tReactions {i+1} and {j+1} have non-adjacent temperature ranges")
-						reaction1.duplicate=True
-						reaction2.duplicate=True
-	
-	if (not duplicates):
-		print("\tNone")
-
-#capitalize files
-def make_capitals(fileName):
-	a=open(fileName).read()
-	output = open(fileName, mode='w')
-	output.write(a.upper())
-	output.close()
-
 
 def is_number(s):
     try:
@@ -526,7 +498,7 @@ def is_H2_formation(reactants, products):
 
 def write_network_file(fileName,speciesList,reactionList):
 	openFile=open(fileName,"w")
-	openFile.write("MODULE network\nUSE constants\nIMPLICIT NONE\n")
+	openFile.write("MODULE network\n    IMPLICIT NONE\n")
 	openFile.write("    INTEGER, PARAMETER :: nSpec={0}, nReac={1}\n".format(len(speciesList),len(reactionList)))
 
 	#write arrays of all species stuff
@@ -545,7 +517,7 @@ def write_network_file(fileName,speciesList,reactionList):
 	
 		except:
 			print(element," not in network, adding dummy index")
-			species_index=len(speciesList)
+			species_index=9999
 		name=element.lower().replace("+","x").replace("e-","elec").replace("#","g")
 		speciesIndices+="n{0}={1},".format(name,species_index)
 	if len(speciesIndices)>72:
@@ -572,27 +544,8 @@ def write_network_file(fileName,speciesList,reactionList):
 	beta=[]
 	gama=[]
 	reacTypes=[]
-	duplicates=[]
-	tmins=[]
-	tmaxs=[]
-	#store important reactions
-	reactionIndices=""
-	for i,reaction in enumerate(reactionList):
-		if ("CO" in reaction.reactants) and ("PHOTON" in reaction.reactants):
-			if "O" in reaction.products and "C" in reaction.products:
-				reactionIndices+="nR_CO_hv={0},".format(i+1)
-		if ("C" in reaction.reactants) and ("PHOTON" in reaction.reactants):
-			reactionIndices+="nR_C_hv={0},".format(i+1)
+	for reaction in reactionList:
 
-	if len(reactionIndices)>50:
-		reactionIndices=reactionIndices[:60]+"&\n&"+reactionIndices[60:]
-	reactionIndices=reactionIndices[:-1]+"\n"
-	openFile.write("    INTEGER, PARAMETER ::"+reactionIndices)
-
-	for i,reaction in enumerate(reactionList):
-		if "CO" in reaction.reactants and "PHOTON" in reaction.reactants:
-			if "O" in reaction.products and "C" in reaction.products:
-				openFile.write(f"INTEGER, PARAMETER :: nrco={i+1}\n")
 		reactant1.append(find_reactant(names,reaction.reactants[0]))
 		reactant2.append(find_reactant(names,reaction.reactants[1]))
 		reactant3.append(find_reactant(names,reaction.reactants[2]))
@@ -603,16 +556,7 @@ def write_network_file(fileName,speciesList,reactionList):
 		alpha.append(reaction.alpha)
 		beta.append(reaction.beta)
 		gama.append(reaction.gamma)
-		if reaction.duplicate:
-			duplicates.append(i+1)
-			tmaxs.append(reaction.temphigh)
-			tmins.append(reaction.templow)
-		reacTypes.append(reaction.reac_type)
-	if len(duplicates)==0:
-		duplicates=[9999]
-		tmaxs=[0]
-		tmins=[0]
-
+		reacTypes.append(get_reaction_type(reaction.reactants[1],reaction.reactants[2]))
 	openFile.write(array_to_string("\tre1",reactant1,type="int"))
 	openFile.write(array_to_string("\tre2",reactant2,type="int"))
 	openFile.write(array_to_string("\tre3",reactant3,type="int"))
@@ -623,17 +567,7 @@ def write_network_file(fileName,speciesList,reactionList):
 	openFile.write(array_to_string("\talpha",alpha,type="float",parameter=False))
 	openFile.write(array_to_string("\tbeta",beta,type="float",parameter=False))
 	openFile.write(array_to_string("\tgama",gama,type="float",parameter=False))
-	openFile.write(array_to_string("\tduplicates",duplicates,type="int",parameter=True))
-	openFile.write(array_to_string("\tminTemps",tmins,type="float",parameter=True))
-	openFile.write(array_to_string("\tmaxTemps",tmaxs,type="float",parameter=True))
-	
-	reacTypes=np.asarray(reacTypes)
-	for reaction_type in reaction_types+["TWOBODY"]:
-		list_name=reaction_type.lower()+"Reacs"
-		indices=np.where(reacTypes==reaction_type)[0]
-		if len(indices>1):
-			indices=[indices[0]+1,indices[-1]+1]
-			openFile.write(array_to_string("\t"+list_name,indices,type="int",parameter=True))
+	openFile.write(array_to_string("\treacType",reacTypes,type="string",parameter=True))
 	openFile.write("END MODULE network")
 	openFile.close()
 
@@ -643,24 +577,28 @@ def find_reactant(species_list,reactant):
 	except:
 		return 9999
 
-
+def get_reaction_type(reac2,reac3):
+	if (reac3=="CHEMDES") or (reac3=="DIFF"):
+		return reac3
+	else:
+		return reac2
 
 def array_to_string(name,array,type="int",parameter=True):
 	if parameter:
-		outString=", PARAMETER :: "+name+" ({0})=(/".format(len(array))
+		outString=", parameter :: "+name+" ({0})=(/".format(len(array))
 	else:
 		outString=" :: "+name+" ({0})=(/".format(len(array))
 	if type=="int":
-		outString="INTEGER"+outString
+		outString="integer"+outString
 		for value in array:
 			outString+="{0},".format(value)
 	elif type=="float":
-		outString="REAL(dp)"+outString
+		outString="double precision"+outString
 		for value in array:
 			outString+="{0:.4e},".format(value)
 	elif type=="string":
 		strLength=len(max(array, key=len))
-		outString="CHARACTER(Len={0:.0f})".format(strLength)+outString
+		outString="character(Len={0:.0f})".format(strLength)+outString
 		for value in array:
 			outString+="\""+value.ljust(strLength)+"\","
 	else:

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from colour import Color
 import matplotlib.pyplot as plt
+import json
 import billiard as Bil
 import billiard.pool as BilPool
 from bokeh.resources import CDN
@@ -28,9 +29,9 @@ AvMax = 200
 rangeForCorners = [(np.log10(rhoMin), np.log10(rhoMax)), (TMin, TMax),
                    ((1.6e21 * AvMin)/(1e6 * 3.086e+18), (1.6e21 * AvMax)/(1e6 * 3.086e+18))]
 
-Manager = Bil.Manager()
-Queue = Manager.Queue()
-ResultDict = Manager.dict()
+SQLManager = Bil.Manager()
+SQLQueue = SQLManager.Queue()
+SQLResultDict = SQLManager.dict()
 FortranManager = Bil.Manager()
 FortranQueue = FortranManager.Queue()
 FortranResultDict = FortranManager.dict()
@@ -48,7 +49,7 @@ def priorWithRangesUI(Parameters, ChangingParamsKeys, GridDictionary, RangesDict
 
 
 def UILikelihood(ChangingParamsValues, PDLines, BaseParameterDict, ChangingParamsKeys,
-                 DBLocation, GridDictionary, RangesDict, UserRangesDict):
+                 GridDictionary, RangesDict, UserRangesDict):
     ChangingParamsValues = ChangingParamsValues.astype(int)
     observation = PDLines["Intensity"].values
     sigmaObservation = PDLines["Sigma"].values
@@ -68,9 +69,10 @@ def UILikelihood(ChangingParamsValues, PDLines, BaseParameterDict, ChangingParam
             LinesOfInterest += [utils.chemDat(PDLines.iloc[i]["Chemical"])[:-4] + "_" + PDLines.iloc[i]["Line"] +
                                 " GHz)_" + PDLines.iloc[i]["Units"]]
         LinesOfInterest = np.asarray(LinesOfInterest)
-        ModelData = utils.retrieveIntensitiesUI(ParameterDict=BaseParameterDict, ChangingParams=ChangingParams,
-                                                DBlocation=DBLocation, LinesOfInterest=LinesOfInterest,
-                                                Chemicals=Chemicals, LinesGiven=PDLines["Line"].values)
+        ParameterDict = {**BaseParameterDict, **ChangingParams}
+        ModelData = utils.retrieveIntensitiesUI(ParameterDict=ParameterDict, ChangingParams=ChangingParams,
+                                                LinesOfInterest=LinesOfInterest, Chemicals=Chemicals,
+                                                LinesGiven=PDLines["Line"].values)
         if type(ModelData) == type(np.nan):
             if np.isnan(ModelData):
                 return -np.inf
@@ -88,7 +90,7 @@ def UILikelihood(ChangingParamsValues, PDLines, BaseParameterDict, ChangingParam
 
 
 def MCMCSavesGridUI(MCMCSaveFile, numberProcesses, ndim, nwalkers, nSteps, knownParams, unknownParamsKeys,
-                    startingPos, DBLocation, GridDictionary, RangesDict, PDLinesJson, UserRangesDict):
+                    startingPos, GridDictionary, RangesDict, PDLinesJson, UserRangesDict):
     os.environ["OMP_NUM_THREADS"] = "1"
     PDLines = pd.read_json(PDLinesJson)
     if os.path.isfile(MCMCSaveFile):
@@ -106,12 +108,10 @@ def MCMCSavesGridUI(MCMCSaveFile, numberProcesses, ndim, nwalkers, nSteps, known
     elif not os.path.isfile(MCMCSaveFile):
         backend = mc.backends.HDFBackend(MCMCSaveFile)
         backend.reset(nwalkers, ndim)
-    Units = PDLines["Units"].array
-    with BilPool.Pool(numberProcesses) as pool: #with BilPool.Pool(numberProcesses) as pool:
+    with BilPool.Pool(numberProcesses) as pool:
         pool.lost_worker_timeout = 500
         sampler = mc.EnsembleSampler(nwalkers, ndim, UILikelihood,
-                                     args=((PDLines, knownParams, unknownParamsKeys,
-                                            DBLocation, GridDictionary, RangesDict,
+                                     args=((PDLines, knownParams, unknownParamsKeys, GridDictionary, RangesDict,
                                             UserRangesDict)),
                                      pool=pool, backend=backend)
         sampler.run_mcmc(startingPos, nSteps, progress=True, store=True)
@@ -142,7 +142,7 @@ def plotChainAndCornersWebUI(sampler, ndim, changingParamsKeys, GridDictionary, 
 
 
 def plotLastCornerWebUI(MCMCSaveFile, changingParamsKeys, GridDictionary, PDLinesJson,
-                        UserRangesDict, knownParams, DBLocation, RangesDict, startingPos):
+                        UserRangesDict, knownParams, RangesDict, startingPos):
     PDLines = pd.read_json(PDLinesJson)
     startingPosArray = np.asarray(startingPos.copy())
     nwalkers, ndim = startingPosArray.shape
@@ -156,7 +156,7 @@ def plotLastCornerWebUI(MCMCSaveFile, changingParamsKeys, GridDictionary, PDLine
             startingPosArray = previousChain[len(previousChain) - 1]
             nwalkers, ndim = startingPosArray.shape
             sampler = mc.EnsembleSampler(nwalkers, ndim, UILikelihood,
-                                         args=((PDLines, knownParams, changingParamsKeys, DBLocation, GridDictionary,
+                                         args=((PDLines, knownParams, changingParamsKeys, GridDictionary,
                                                 RangesDict, UserRangesDict)),
                                          backend=backend)
             samples = sampler.get_chain()

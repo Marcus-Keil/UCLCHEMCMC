@@ -1,6 +1,0 @@
-# Photoreactions & H2 Formation
-Updated H2 Formation to Cazaux & Tielens 2004 formulism ahead of major grain update
-C photoionization, H2 self-shielding and CO self-shielding treatments brought over from UCLPDR
-
-#Reaction Temperature Bounds
-Reactions can now be duplicated (same reactants and products) with different rates and temperature bounds. UCLCHEM will then use the correct rate for the current temperature.

@@ -144,7 +144,7 @@
             {% endif %}
         </tr>
         <tr>
-            <td>Zeta factor</td>
+            <td>Cosmic ray factor</td>
             {% if "zeta" in session %}
                 <td> {{ session["zeta"] }}</td>
             {% else %}
@@ -158,7 +158,7 @@
             {% endif %}
         </tr>
         <tr>
-            <td>Radiation field</td>
+            <td>UV radiation field factor</td>
             {% if "radfield" in session %}
                 <td> {{ session["radfield"] }}</td>
             {% else %}
@@ -211,14 +211,14 @@
                 <table>
                     <tr stle="background-color: hsl(0, 0%, 45%)">
                         <td>{{Molecule}}</td>
-                        <td> Intensity ()</td>
+                        <td> Intensity</td>
                         <td> Error estimate </td>
                     </tr>
                     {% for Line in session[Molecule] %}
                         {% set Int = Molecule+"_"+Line+"_Int" %}
                         {% set ER = Molecule+"_"+Line+"_ER" %}
                         <tr>
-                            <td>{{ Line }}</td>
+                            <td>{{ Line }} GHz)</td>
                             <td>{{session[Int]}}</td>
                             <td>{{session[ER]}}</td>
                         </tr>
