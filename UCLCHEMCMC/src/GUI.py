@@ -91,7 +91,9 @@ MCMCStepsPerItteration = 10
 ManagerPoolSize = 1
 FortranPoolSize = 2
 
-MCMCNumberProcesses = 3
+MCMCNumberProcesses = os.cpu_count() - 6
+if MCMCNumberProcesses <= 1:
+    MCMCNumberProcesses = 2
 BaseUIFolder = "./"
 ResultsFolder = "../results/"
 SaveFolder = "../saves/"
