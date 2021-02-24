@@ -6,6 +6,7 @@ Required Packages
 Installation Instructions:
 
 Compile UCLCHEM:
+
 In directory 
 
     /UCLCHEMCMC/src/UCLCHEM/src/ 
@@ -24,6 +25,7 @@ to
     /UCLCHEMCMC/src/
 
 Compile Spectral Radex:
+
 In directory 
 
     /UCLCHEMCMC/src/SpectralRadex/radex/src
@@ -34,6 +36,7 @@ call
     make python
 
 To Run UCLCHEMCMC:
+
 In directory 
 
     /UCLCHEMCMC/
