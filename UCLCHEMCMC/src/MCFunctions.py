@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from colour import Color
 import matplotlib.pyplot as plt
-import json
+import GUI
 import billiard as Bil
 import billiard.pool as BilPool
 from bokeh.resources import CDN
@@ -450,3 +450,31 @@ def CornerPlots(SessionName, Parameters, ParameterRanges=np.array([[-1]]),
         plt.savefig(FileName+".png")
         plt.close(fig)
     return
+
+
+def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviationSpread=0.1, WithError=True):
+    BaseDictionary = {"phase": 1, "switch": 1, "collapse": 1, "readAbunds": 0, "writeStep": 1, "points": 1, "desorb": 1,
+                      "finalOnly": "True", "fr": 1.0}
+    UCLCHEMDict = {**BaseDictionary, **ChangingParameters}
+    for key in GUI.ParameterDefaults.keys():
+        if key not in UCLCHEMDict:
+            UCLCHEMDict[key] = GUI.ParameterDefaults[key]
+    ParamDF, ChemDF = utils.UCLChemDataFrames(UCLChemDict=UCLCHEMDict, Queue=False)
+    UCLParamOut = utils.RadexForGrid(UCLChemDict=UCLCHEMDict, UCLParamDF=ParamDF, UCLChemDF=ChemDF, Queue=False)
+    ReturnLines = []
+    for chems in LinesOfInterestDict.keys():
+        chemical = utils.chemDat(chems)[:-4]
+        for line in LinesOfInterestDict[chems]:
+            ReturnLines += [chemical + '_' + line]
+    ReturnLines = np.asarray(ReturnLines)
+    SyntheticData_True = np.asarray(UCLParamOut[ReturnLines].values[0]).astype(float)
+    if WithError:
+        SyntheticData_Gaus = np.random.normal(SyntheticData_True, SyntheticData_True*StandardDeviationSpread)
+        SyntheticData_Error = SyntheticData_True*StandardDeviationSpread
+        Datalist = [[ReturnLines.T, SyntheticData_Gaus.T, SyntheticData_Error.T]]
+        SyntheticDataPD = pd.DataFrame(np.array([ReturnLines, SyntheticData_Gaus, SyntheticData_Error]).T,
+                                       columns=['Line_Unit', 'Measurement', 'Error'])
+        SyntheticDataPD = SyntheticDataPD.astype({'Measurement': 'float', 'Error': 'float'})
+        return SyntheticDataPD
+    else:
+        return UCLParamOut[ReturnLines]

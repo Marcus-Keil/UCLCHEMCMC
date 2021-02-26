@@ -148,7 +148,7 @@ def FortranUCLCHEM(dictionary, numberpoints, CurrentPID, stepCount):
     return None
 
 
-def RadexForGrid(UCLChemDict, UCLParamDF, UCLChemDF):
+def RadexForGrid(UCLChemDict, UCLParamDF, UCLChemDF, Queue=True):
     for k in range(np.shape(UCLParamDF)[0]):
         radexDic = radex.get_default_parameters()
         radexDic['tkin'] = UCLParamDF.loc[k, 'cloudTempOut']
@@ -163,7 +163,7 @@ def RadexForGrid(UCLChemDict, UCLParamDF, UCLChemDF):
                 for j in ReverseChemForUCLCHEM(i).split(", "):
                     radexDic['molfile'] = chemDat(j)
                     #try:
-                    RadexDF = runRadex(RadexParamDict=radexDic)
+                    RadexDF = runRadex(RadexParamDict=radexDic, Queue=Queue)
                     if RadexDF is np.nan:
                         continue
                     UCLParamDF = RadexToDF(UCLChemDict, UCLParamDF, RadexDF, k)
