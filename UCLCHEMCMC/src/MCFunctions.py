@@ -471,7 +471,6 @@ def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviation
     if WithError:
         SyntheticData_Gaus = np.random.normal(SyntheticData_True, SyntheticData_True*StandardDeviationSpread)
         SyntheticData_Error = SyntheticData_True*StandardDeviationSpread
-        Datalist = [[ReturnLines.T, SyntheticData_Gaus.T, SyntheticData_Error.T]]
         SyntheticDataPD = pd.DataFrame(np.array([ReturnLines, SyntheticData_Gaus, SyntheticData_Error]).T,
                                        columns=['Line_Unit', 'Measurement', 'Error'])
         SyntheticDataPD = SyntheticDataPD.astype({'Measurement': 'float', 'Error': 'float'})
