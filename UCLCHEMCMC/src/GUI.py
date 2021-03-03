@@ -82,8 +82,6 @@ ParameterDefaults = {'finalDens': 1.0e5,
 
 # MCMC Parameters as of now
 
-# echo '.dump' | sqlite3 Database_New.db > test_new.dump
-# cat test.dump | sqlite3 Database.db
 #
 MCMCwalkers = 10
 MCMCStepsPerRun = 200
