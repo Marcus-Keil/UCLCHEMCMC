@@ -310,19 +310,20 @@ def make_Grid(ndim, flat_samples, ParameterNames):
     return grid
 
 
-def CornerPlots(SessionName, Parameters, ParameterRanges=np.array([[-1]]),
-                GridType='Coarse', BurnIn=-1, PlotChains = False,
+def CornerPlots(SessionName, Parameters, GridType='Coarse', BurnIn=-1, PlotChains = False,
                 CornerPackagePlot=False, PlotGivenValues=False, GivenValues=[]):
     FileName = SessionName[:-3]
     if PlotGivenValues and (GivenValues == [] or len(Parameters) != len(GivenValues)):
         print("You must set GivenValues to have the same number of entries as Parameters, if you set PlotGivenValues to True")
         return
-    GridFile = GridType + "_Grid.csv"
+    GridFile = "../data/" + GridType + "_Grid.csv"
     Grid = pd.read_csv(GridFile, delimiter=",/", engine='python')
     GridDictionary = Grid.set_index('Parameter')["Grid"].to_dict()
     for P in GridDictionary.keys():
         GridDictionary[P] = (np.array(GridDictionary[P].split(",")).astype(np.float))
-
+    if PlotGivenValues:
+        for i in range(len(Parameters)):
+            GivenValues[i] = np.asarray((np.abs(GridDictionary[Parameters[i]] - GivenValues[i])).argmin())
     if BurnIn < 0:
         BurnIn = 0
     backend = mc.backends.HDFBackend(SessionName)
@@ -339,13 +340,12 @@ def CornerPlots(SessionName, Parameters, ParameterRanges=np.array([[-1]]),
         fig, axes = plt.subplots(ndim, figsize=(10, 7), sharex=True)
         for i in range(ndim):
             ax = axes[i]
-            ax.plot(samples[:, :, i], "k", alpha=0.3)
+            currentSample = np.asarray([(np.abs(GridDictionary[Parameters[i]] - k)).argmin() for k in samples[:, :, i]])
+            ax.plot(currentSample, "k", alpha=0.3)
             ax.set_xlim(0, len(samples))
             ax.set_ylabel(Parameters[i])
-            if Parameters[i] == 'finalDens' or Parameters[i] == 'rout':
-                ax.set_yscale('log')
-            else:
-                ax.set_yscale('linear')
+            yticks = ax.get_yticks()
+            ax.set_yticklabels([GridDictionary[Parameters[i]][int(k)] for k in yticks])
             if PlotGivenValues:
                 ax.axhline(GivenValues[i], color='b', linestyle='solid', linewidth=3, alpha=0.2)
             ax.yaxis.set_label_coords(-0.1, 0.5)
@@ -353,97 +353,76 @@ def CornerPlots(SessionName, Parameters, ParameterRanges=np.array([[-1]]),
         plt.savefig(FileName + "_Chain.png")
         plt.close(fig)
     if CornerPackagePlot:
-        if ParameterRanges[0][0] == -1:
-            fig = corner.corner(flat_samples, labels=Parameters, range=rangeForCorners)
-        else:
-            fig = corner.corner(flat_samples, labels=Parameters)
-            plt.show()
+        fig = corner.corner(flat_samples, labels=Parameters)
         fig.savefig(FileName + "_Corner.png")
         plt.close(fig)
     else:
         fig, axs = plt.subplots(ndim, ndim, figsize=(10, 10))
-        if PlotGivenValues:
-            for i in range(len(Parameters)):
-                if Parameters[i] == "rout" or Parameters[i] == "finalDens":
-                    GivenValues[i] = np.log10(GivenValues[i])
         for i in range(0, ndim):
-            if i == 0:
-                weights = np.ones_like(flat_samples[:, 0]) / len(flat_samples[:, 0])
-                if Parameters[0] == "rout" or Parameters[0] == "finalDens":
-                    hist, edges = np.histogram(np.log10(flat_samples[:, 0]), density=True,
-                                               bins=np.unique(np.log10(flat_samples[:, 0])))
-                    axs[0, 0].hist(np.log10(flat_samples[:, 0]), weights=weights, bins=np.unique(
-                        np.log10(flat_samples[:, 0])))  # Make histogram of 1d potential here in Log space
-                    if PlotGivenValues:
-                        axs[0, 0].axvline(GivenValues[0], color='k', linestyle='dashed', linewidth=1)
+            currentYSample = np.asarray([(np.abs(GridDictionary[Parameters[i]] - k)).argmin() for k in flat_samples[:,i]])
+            currentYBins = np.linspace(currentYSample.min() - 0.5, currentYSample.max() + 0.5,
+                                       int(currentYSample.max()-currentYSample.min()+2))
+            weights = np.ones_like(currentYSample) / len(currentYSample)
+            #if i == 0:
+            #    weights = np.ones_like(currentXSample) / len(currentXSample)
+            #    axs[0, 0].hist(currentXSample, weights=weights, bins=currentXBins)
+            #    if PlotGivenValues:
+            #        axs[0, 0].axvline(GivenValues[0], color='k', linestyle='dashed', linewidth=1)
+            #    yAxisLabel = "P(" + Parameters[0] + ")"
+            #    axs[0, 0].set_ylabel(yAxisLabel)
+            #    axs[0, 0].yaxis.set_ticks([])
+            #    axs[0, 0].xaxis.set_ticks([])
+            #    axs[0, 0].set_xlim(currentXBins.min() + 0.5, currentXBins.max() + 0.5)
+            #else:
+            for j in range(i + 1):
+                currentXSample = np.asarray([(np.abs(GridDictionary[Parameters[j]] - k)).argmin() for k in flat_samples[:, j]])
+                currentXBins = np.linspace(currentXSample.min() - 0.5, currentXSample.max() + 0.5,
+                                           int(currentXSample.max() - currentXSample.min() + 2))
+                if j == 0 and j == i:
+                    yAxisLabel = "P(" + Parameters[j] + ")"
+                elif j == 0:
+                    yAxisLabel = Parameters[i]
                 else:
-                    hist, edges = np.histogram(flat_samples[:, 0], density=True, bins=np.unique(flat_samples[:, 0]))
-                    axs[0, 0].hist(flat_samples[:, 0], weights=weights, bins=np.unique(flat_samples[:, 0]))
+                    yAxisLabel = ''
+                if i + 1 == ndim:
+                    xAxisLabel = Parameters[j]
+                else:
+                    xAxisLabel = ''
+                if j == i:
+                    axs[i, j].hist(currentYSample, weights=weights, bins=currentYBins)
                     if PlotGivenValues:
-                        axs[0, 0].axvline(GivenValues[0], color='k', linestyle='dashed', linewidth=1)
-                yAxisLabel = "P(" + Parameters[0] + ")"
-                axs[0, 0].set_ylabel(yAxisLabel)
-                axs[0, 0].set_yticks([], [])
-                axs[0, 0].set_xticks([], [])
-                axs[0, 0].set_xlim((edges.min(), edges.max()))
-            else:
-                for j in range(i + 1):
-                    if j == 0 and j == i:
-                        yAxisLabel = "P(" + Parameters[j] + ")"
-                    elif j == 0:
-                        yAxisLabel = Parameters[i]
+                        axs[i, j].axvline(GivenValues[j], color='k', linestyle='dashed', linewidth=1)
+                    axs[i, j].set_xlim(currentYBins.min(), currentYBins.max())
+                    axs[i, j].set_ylim(0, 0.5)
+                else:
+                    if i == 1:
+                        h, x, y, image = axs[i, j].hist2d(currentXSample, currentYSample,
+                                                          bins=[currentXBins, currentYBins], weights=weights)
                     else:
-                        yAxisLabel = ''
-                    if i + 1 == ndim:
-                        xAxisLabel = Parameters[j]
-                    else:
-                        xAxisLabel = ''
-                    if Parameters[j] == "rout" or Parameters[j] == "finalDens":
-                        xValues = np.log10(flat_samples[:, j])
-                    else:
-                        xValues = flat_samples[:, j]
-                    if Parameters[i] == "rout" or Parameters[i] == "finalDens":
-                        yValues = np.log10(flat_samples[:, i])
-                    else:
-                        yValues = flat_samples[:, i]
-                    if j == i:
-                        weights = np.ones_like(xValues) / len(xValues)
-                        if Parameters[j] == "rout" or Parameters[j] == "finalDens":
-                            hist, edges = np.histogram(xValues, density=True,
-                                                       bins=np.shape(np.unique(xValues))[0])
-                            axs[i, j].hist(xValues, weights=weights, bins=np.unique(xValues))
-                        else:
-                            hist, edges = np.histogram(xValues, density=True,
-                                                       bins=np.shape(np.unique(xValues))[0])
-                            axs[i, j].hist(xValues, weights=weights, bins=np.unique(xValues))
-                        if PlotGivenValues:
-                            axs[i, j].axvline(GivenValues[j], color='k', linestyle='dashed', linewidth=1)
-                        axs[i, j].set_xlim(edges.min(), edges.max())
-                        axs[i, j].set_yticks([], [])
-                    else:
-                        weights = np.ones_like(xValues) / len(xValues)
-                        if i == 1:
-                            h, x, y, image = axs[i, j].hist2d(xValues, yValues,
-                                                              bins=(np.shape(np.unique(xValues))[0],
-                                                                    np.shape(np.unique(yValues))[0]), weights=weights)
-                        else:
-                            axs[i, j].hist2d(xValues, yValues,
-                                             bins=(np.shape(np.unique(xValues))[0],
-                                                   np.shape(np.unique(yValues))[0]), weights=weights)
-                        if PlotGivenValues:
-                            axs[i, j].axvline(GivenValues[j], color='w', linestyle='solid', linewidth=1)
-                            axs[i, j].axhline(GivenValues[i], color='w', linestyle='solid', linewidth=1)
-                    axs[i, j].set_ylabel(yAxisLabel)
-                    axs[i, j].set_xlabel(xAxisLabel)
-                    if i + 1 != ndim:
-                        axs[i, j].set_xticks([], [])
-                    if j != 0 and j != i:
-                        axs[i, j].set_yticks([], [])
+                        axs[i, j].hist2d(currentXSample, currentYSample,
+                                         bins=[currentXBins, currentYBins], weights=weights)
+                    if PlotGivenValues:
+                        axs[i, j].axvline(GivenValues[j], color='w', linestyle='solid', linewidth=1)
+                        axs[i, j].axhline(GivenValues[i], color='w', linestyle='solid', linewidth=1)
+                    axs[i, j].set_ylim(currentYBins.min(), currentYBins.max())
+                axs[i, j].set_xlim(currentXBins.min(), currentXBins.max())
+                axs[i, j].set_ylabel(yAxisLabel)
+                axs[i, j].set_xlabel(xAxisLabel)
+                if i+1 != ndim:
+                    axs[i, j].xaxis.set_ticks([])
+                else:
+                    xTicks = axs[i, j].get_xticks()
+                    TickValues = np.asarray([GridDictionary[Parameters[j]][int(k)] for k in xTicks])
+                    axs[i, j].set_xticklabels(TickValues)
+                if (j != 0 and j+1 != ndim) or i == 0 or (j+1 == ndim and i+1 == ndim):
+                    axs[i, j].yaxis.set_ticks([])
+                else:
+                    yTicks = axs[i, j].get_yticks()
+                    axs[i, j].set_yticklabels([GridDictionary[Parameters[i]][int(k)] for k in yTicks])
         for i in range(ndim):
             for j in range(ndim):
                 if j > i:
                     axs[i, j].remove()
-
         fig.subplots_adjust(right=0.8)
         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
         fig.colorbar(image, cax=cbar_ax)
@@ -452,7 +431,7 @@ def CornerPlots(SessionName, Parameters, ParameterRanges=np.array([[-1]]),
     return
 
 
-def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviationSpread=0.1, WithError=True):
+def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviationSpread=0.1, WithError=False):
     BaseDictionary = {"phase": 1, "switch": 1, "collapse": 1, "readAbunds": 0, "writeStep": 1, "points": 1, "desorb": 1,
                       "finalOnly": "True", "fr": 1.0}
     UCLCHEMDict = {**BaseDictionary, **ChangingParameters}
