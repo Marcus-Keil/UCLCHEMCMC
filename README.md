@@ -1,6 +1,6 @@
 Required Packages
 
-'pandas', 'numpy', 'corner', 'matplotlib', 'emcee', 'billiard', 'bokeh', 'flask', 'celery'
+pandas numpy corner matplotlib emcee billiard bokeh flask celery
 
 
 Installation Instructions:
@@ -28,11 +28,15 @@ Compile Spectral Radex:
 
 In directory 
 
+    /UCLCHEMCMC/src/SpectralRadex/radex
+
+create a directory called bin, then in
+
     /UCLCHEMCMC/src/SpectralRadex/radex/src
 
 call 
 
-    make
+    make install
     make python
 
 To Run UCLCHEMCMC:
