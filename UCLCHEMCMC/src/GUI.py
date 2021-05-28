@@ -89,7 +89,7 @@ MCMCStepsPerItteration = 10
 ManagerPoolSize = 1
 FortranPoolSize = 2
 
-MCMCNumberProcesses = os.cpu_count() - 6
+MCMCNumberProcesses = os.cpu_count() - 5
 if MCMCNumberProcesses <= 1:
     MCMCNumberProcesses = 2
 BaseUIFolder = "./"
@@ -108,7 +108,7 @@ SaveFolder = "../saves/"
 @celery.task(bind=True)
 def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
             MCMCFile, GridDictionary, Emulator=False, Informed=False, Walkers=MCMCwalkers,
-            StepsPerClick=MCMCStepsPerRun, StepsPerSave=MCMCStepsPerItteration):
+            StepsPerClick=MCMCStepsPerRun, StepsPerSave=MCMCStepsPerItteration, startPoints=[]):
     for keys in GridDictionary.keys():
         GridDictionary[keys] = np.asarray(GridDictionary[keys])
     BaseDict["outSpecies"] = len(utils.UniqueOutSpecieslist)
@@ -124,20 +124,20 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
         if upGrid < len(GridDictionary[RangeLim])-1:
             upGrid += 1
         UserRangesDict[RangeLim+"_up"] = upGrid
-        if Informed:
-            startPoints = utils.createGausStartingPointsGrid(PDLinesJson, ChangingParamList, Walkers, GridDictionary)
-            for i in range(len(startPoints)):
-                if startPoints[i] < lowGrid:
-                    startPoints[i] = lowGrid
-                elif startPoints[i] > upGrid:
-                    startPoints[i] = upGrid
-        else:
-            if ind == 0:
-                startPoints = np.random.randint(lowGrid, upGrid+1, Walkers)
-            else:
-                startPoints = np.vstack([startPoints, np.random.randint(lowGrid, upGrid+1, Walkers)])
-    if len(ChangingParamList) > 1:
-        startPoints = startPoints.T
+    #    if Informed:
+    #        startPoints = utils.createGausStartingPointsGrid(PDLinesJson, ChangingParamList, Walkers, GridDictionary)
+    #        for i in range(len(startPoints)):
+    #            if startPoints[i] < lowGrid:
+    #                startPoints[i] = lowGrid
+    #            elif startPoints[i] > upGrid:
+    #                startPoints[i] = upGrid
+    #    else:
+    #        if ind == 0:
+    #            startPoints = np.random.randint(lowGrid, upGrid+1, Walkers)
+    #        else:
+    #            startPoints = np.vstack([startPoints, np.random.randint(lowGrid, upGrid+1, Walkers)])
+    #if len(ChangingParamList) > 1:
+    #    startPoints = startPoints.T
     iterations = int(StepsPerClick/StepsPerSave)
     if Emulator:
         MCMCFunction = mcf.MCMCSavesGridUIWithEmu
@@ -146,16 +146,16 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
     ManagerPool = BilPool.Pool(ManagerPoolSize, utils.worker_main)
     FortranPool = BilPool.Pool(FortranPoolSize, utils.worker_Fortran)
     for i in range(iterations):
+        mcf.LikelihoodDict.clear()
         sampler = MCMCFunction(MCMCFile, MCMCNumberProcesses, len(ChangingParamList), Walkers,
                                StepsPerSave, BaseDict, ChangingParamList, startPoints,
                                GridDictionary, ParameterRanges, PDLinesJson,
                                UserRangesDict)
-        js, tag = mcf.plotChainAndCornersWebUI(sampler, len(ChangingParamList), ChangingParamList, GridDictionary, UserRangesDict)
+        #js, tag = mcf.plotChainAndCornersWebUI(sampler, len(ChangingParamList), ChangingParamList, GridDictionary, UserRangesDict)
         self.update_state(state='PROGRESS', meta={'current': i+1, 'total': iterations,
                                                   'status': "completed " + str(
                                                       (i + 1) * StepsPerSave) + " of " + str(
-                                                      StepsPerClick) + " steps",
-                                                  'figureJS': js, 'figureTag': tag})
+                                                      StepsPerClick) + " steps"})  # ,'figureJS': js, 'figureTag': tag})
     for i in range(FortranPoolSize):
         mcf.FortranQueue.put(("Stop", []))
         time.sleep(2)
@@ -380,7 +380,7 @@ def UCLCHEMChemResults():
 def Options():
     if request.method == "POST":
         session["Grid"] = request.form["Grid"]
-        session["Emulator"] = request.form["Emulator"]
+        #session["Emulator"] = request.form["Emulator"]
         session["Informed"] = request.form["Informed"]
         session["Walkers"] = request.form["Walkers"]
         session["StepsPerClick"] = request.form["StepsPerClick"]
@@ -468,16 +468,15 @@ def Results():
             startPoints = np.random.randint(lowGrid, upGrid + 1, MCMCwalkers)
         else:
             startPoints = np.vstack([startPoints, np.random.randint(lowGrid, upGrid + 1, MCMCwalkers)])
-
     if len(ChangingParamList) > 1:
         startPoints = startPoints.T
     startPoints = startPoints.tolist()
+    session['startPoints'] = startPoints
     for keys in GridDictionary.keys():
         GridDictionary[keys] = (GridDictionary[keys]).tolist()
     session["GridDictionary"] = GridDictionary
     js, tag = mcf.plotLastCornerWebUI(session["SessionBackend"], ChangingParamList, session["GridDictionary"],
-                                      PDLines.to_json(), UserRangesDict, BaseDict,
-                                      ParameterRanges, startPoints)
+                                      startPoints)
     if request.method == 'GET':
         return render_template('Results.html', name=CodeName, Lines=Lines, session=session, JS=js, Tag=tag)
     return redirect(url_for('Results'))
@@ -546,9 +545,9 @@ def longtask():
             else:
                 BaseDict[key] = session[key]
     task = RunMCMC.apply_async(args=(BaseDict, ChangingParamList, ChangingDictRange, PDLines.to_json(),
-                                     session["SessionBackend"], session["GridDictionary"], session["Emulator"],
+                                     session["SessionBackend"], session["GridDictionary"], False,
                                      session["Informed"], session["Walkers"], session["StepsPerClick"],
-                                     session["StepsPerSave"]))
+                                     session["StepsPerSave"], session['startPoints']))
     return jsonify({}), 202, {'Location': url_for('taskstatus', task_id=task.id)}
 
 
@@ -605,4 +604,4 @@ def Citation():
 # =========================================================================================================
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='127.0.0.1', port=5000, debug=False)

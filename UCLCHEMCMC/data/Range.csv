@@ -9,5 +9,5 @@ key:value
 "radfield_high":1.0e4
 "rout_low":0.0001
 "rout_high":10
-"Av_low":0.001
+"Av_low":0.0001
 "Av_high":200

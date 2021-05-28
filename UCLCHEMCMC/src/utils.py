@@ -12,10 +12,10 @@ sleepTime = 1
 timeOutForSQL = 1000
 savedModelsColumns = ['phase', 'switch', 'collapse', 'readAbunds', 'writeStep', 'points', 'outSpecies', 'desorb',
                       'initialDens', 'finalDens', 'initialTemp', 'maxTemp', 'zeta', 'radfield', 'rin', 'rout', 'fr',
-                      'ageOfCloudOut', 'h2densOut', 'cloudTempOut', 'avOut', 'radiationOut', 'zetaOut', 'h2FormRateOut',
-                      'fcOut', 'foOut', 'fmgOut', 'fheOut', 'deptOut', 'finalOnly', 'H', 'H+']
+                      'ageOfCloudOut', 'hdensOut', 'cloudTempOut', 'avOut', 'radiationOut', 'zetaOut', 'h2FormRateOut',
+                      'fcOut', 'foOut', 'fmgOut', 'fheOut', 'deptOut', 'finalOnly', 'H', 'H+', 'H2']
 
-DBLocation = "../data/Database.db"
+DBLocation = "../data/DefaultDatabase.db"
 ChemFile = "../data/Chemicals.csv"
 Chem = pd.read_csv(ChemFile, delimiter=",/", engine='python')
 Lines = Chem.set_index('Chemical')["Lines"].to_dict()
@@ -92,8 +92,8 @@ def chemForUCLCHEM(i):
 outSpeciesList = list(Lines.keys())
 outSpeciesString = " ".join(list(Lines.keys()))
 UniqueOutSpecies = np.unique(np.asarray([chemForUCLCHEM(x) for x in outSpeciesList])).tolist()
-UniqueOutSpeciesString = 'H H+ ' + ' '.join(UniqueOutSpecies)
-UniqueOutSpecieslist = ['H', 'H+'] + UniqueOutSpecies
+UniqueOutSpeciesString = 'H H+ H2 ' + ' '.join(UniqueOutSpecies)
+UniqueOutSpecieslist = ['H', 'H+', 'H2'] + UniqueOutSpecies
 
 def DistancePercent(BaseFlux):
     Lower = float(BaseFlux) * 0.8
@@ -125,13 +125,14 @@ def UCLChemDataFrames(UCLChemDict, Test=False, Queue=True):
         UCLChemDict['columnFile'] = '../results/col.dat'
         uclchem.general(dictionary=UCLChemDict, outspeciesin=UniqueOutSpeciesString)
     if UCLChemDict["points"] == 1:
-        physDF = pd.DataFrame(data=parameterArray[:, 0, :], columns=['ageOfCloudOut', 'h2densOut', 'cloudTempOut',
+        physDF = pd.DataFrame(data=parameterArray[:, 0, :], columns=['ageOfCloudOut', 'hdensOut', 'cloudTempOut',
                                                                      'avOut', 'radiationOut', 'zetaOut',
                                                                      'h2FormRateOut', 'fcOut',
                                                                      'foOut', 'fmgOut', 'fheOut', 'deptOut'])
         physDF['H'] = chemicalAbunArray[:stepCount[0], 0, 0]
         physDF['H+'] = chemicalAbunArray[:stepCount[0], 0, 1]
-        chemDF = pd.DataFrame(data=chemicalAbunArray[:, 0, 2:], columns=UniqueOutSpecieslist[2:])
+        physDF['H2'] = chemicalAbunArray[:stepCount[0], 0, 2]
+        chemDF = pd.DataFrame(data=chemicalAbunArray[:, 0, 3:], columns=UniqueOutSpecieslist[3:])
     else:
         exit("Currently unable to run with multiple Points")
     return physDF, chemDF
@@ -148,14 +149,14 @@ def FortranUCLCHEM(dictionary, numberpoints, CurrentPID, stepCount):
     return None
 
 
-def RadexForGrid(UCLChemDict, UCLParamDF, UCLChemDF, Queue=True):
+def RadexForGrid(UCLChemDict, UCLParamDF, UCLChemDF, Queue=True, RotDia=False):
     for k in range(np.shape(UCLParamDF)[0]):
         radexDic = radex.get_default_parameters()
         radexDic['tkin'] = UCLParamDF.loc[k, 'cloudTempOut']
-        radexDic['h2'] = UCLParamDF.loc[k, 'h2densOut']
-        radexDic['h'] = UCLParamDF.loc[k, 'H']
-        radexDic['h+'] = UCLParamDF.loc[k, 'H+']
-        radexDic['e-'] = UCLParamDF.loc[k, 'H+']
+        radexDic['h2'] = UCLParamDF.loc[k, 'hdensOut']*UCLParamDF.loc[k, 'H2']
+        radexDic['h'] = UCLParamDF.loc[k, 'hdensOut']
+        radexDic['h+'] = UCLParamDF.loc[k, 'hdensOut']*UCLParamDF.loc[k, 'H+']
+        radexDic['e-'] = UCLParamDF.loc[k, 'hdensOut']*UCLParamDF.loc[k, 'H+']
         radexDic['fmax'] = 1000.0
         for i in UCLChemDF.columns:
             radexDic['cdmol'] = UCLChemDF.loc[k, i] * 1.6e21 * UCLParamDF.loc[k, 'avOut']
@@ -163,18 +164,25 @@ def RadexForGrid(UCLChemDict, UCLParamDF, UCLChemDF, Queue=True):
                 for j in ReverseChemForUCLCHEM(i).split(", "):
                     radexDic['molfile'] = chemDat(j)
                     #try:
-                    RadexDF = runRadex(RadexParamDict=radexDic, Queue=Queue)
+                    if RotDia:
+                        RadexDF = runRadex(RadexParamDict=radexDic, Queue=Queue, Upper=True)
+                    else:
+                        RadexDF = runRadex(RadexParamDict=radexDic, Queue=Queue)
                     if RadexDF is np.nan:
                         continue
-                    UCLParamDF = RadexToDF(UCLChemDict, UCLParamDF, RadexDF, k)
+                    if RotDia:
+                        UCLParamDF = RadexToDF(UCLChemDict, UCLParamDF, RadexDF, k, RotDia=True)
+                    else:
+                        UCLParamDF = RadexToDF(UCLChemDict, UCLParamDF, RadexDF, k)
                     #except:
                     #    pass
             else:
-                pass
+                RadexDF = np.nan
+                continue
     return UCLParamDF
 
 
-def RadexToDF(UCLChemDict, UCLParamDF, RadexArray, indexOfModel):
+def RadexToDF(UCLChemDict, UCLParamDF, RadexArray, indexOfModel, RotDia=False):
     UCLChemDictKeys = [k for k in UCLChemDict]
     UCLChemDictValues = [v for v in UCLChemDict.values()]
     for l in range(len(UCLChemDictKeys)):
@@ -192,10 +200,15 @@ def RadexToDF(UCLChemDict, UCLParamDF, RadexArray, indexOfModel):
         UCLParamDF[T_rColumnName].iloc[indexOfModel] = RadexArray[j, 1]
         UCLParamDF[intColumnName].iloc[indexOfModel] = RadexArray[j, 2]
         UCLParamDF[fluColumnName].iloc[indexOfModel] = RadexArray[j, 3]
+        if RotDia:
+            EuColumnName = RadexArray[j, 0]+'_Eu'
+            if EuColumnName not in UCLParamDF.columns:
+                UCLParamDF[EuColumnName] = np.nan
+            UCLParamDF[RadexArray[j, 0]+'_Eu'].iloc[indexOfModel] = RadexArray[j, 4]
     return UCLParamDF
 
 
-def runRadex(RadexParamDict, Queue=True):
+def runRadex(RadexParamDict, Queue=True, Upper=False):
     CurrentPID = os.getpid()
     if Queue:
         mcf.FortranQueue.put(("RunRADEX", [RadexParamDict, CurrentPID]))
@@ -215,7 +228,11 @@ def runRadex(RadexParamDict, Queue=True):
                              str(dataFrame["freq"].iloc[i]) + \
                              " GHz)"
             # Name, T_r, Intensity, Flux
-            OutputList += [[TransitionName, dataFrame["T_R (K)"].iloc[i],
+            if Upper:
+                OutputList += [[TransitionName, dataFrame["T_R (K)"].iloc[i], dataFrame["FLUX (K*km/s)"].iloc[i],
+                                dataFrame["FLUX (erg/cm2/s)"].iloc[i], dataFrame["E_UP (K)"].iloc[i]]]
+            else:
+                OutputList += [[TransitionName, dataFrame["T_R (K)"].iloc[i],
                            dataFrame["FLUX (K*km/s)"].iloc[i], dataFrame["FLUX (erg/cm2/s)"].iloc[i]]]
     else:
         for i in range(np.shape(dataFrame)[0]):
@@ -225,8 +242,12 @@ def runRadex(RadexParamDict, Queue=True):
                              str(dataFrame["freq"].iloc[i]) + \
                              " GHz)"
             # Name, T_r, Intensity, Flux
-            OutputList += [[TransitionName, dataFrame["T_R (K)"].iloc[i],
-                            dataFrame["FLUX (K*km/s)"].iloc[i], dataFrame["FLUX (erg/cm2/s)"].iloc[i]]]
+            if Upper:
+                OutputList += [[TransitionName, dataFrame["T_R (K)"].iloc[i], dataFrame["FLUX (K*km/s)"].iloc[i],
+                                dataFrame["FLUX (erg/cm2/s)"].iloc[i], dataFrame["E_UP (K)"].iloc[i]]]
+            else:
+                OutputList += [[TransitionName, dataFrame["T_R (K)"].iloc[i],
+                                dataFrame["FLUX (K*km/s)"].iloc[i], dataFrame["FLUX (erg/cm2/s)"].iloc[i]]]
     OutputArray = np.asarray(OutputList)
     return OutputArray
 
@@ -412,7 +433,7 @@ def retrieveEntry(ID, ModelParameters=False):
         mcf.SQLQueue.put(("Search", [sqlSearch, CurrentPID]))
         SearchResults = RetrieveQueueResults(CurrentPID)
     else:
-        sqlSearch = 'SELECT ModelID, ageOfCloudOut, h2densOut, cloudTempOut, avOut, radiationOut, zetaOut, ' \
+        sqlSearch = 'SELECT ModelID, ageOfCloudOut, hdensOut, cloudTempOut, avOut, radiationOut, zetaOut, ' \
                     '"h2FormRateOut", fcOut, foOut, fmgOut, fheOut, deptOut FROM savedModels WHERE ModelID in (' + \
                     str(ID.tolist())[1:-1] + ');'
         CurrentPID = os.getpid()

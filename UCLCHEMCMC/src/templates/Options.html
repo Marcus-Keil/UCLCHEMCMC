@@ -30,32 +30,37 @@
                 <option value= "Fine">Fine Grid</option>"
             </select>
 
-            <select name="Emulator">
+            <!---<select name="Emulator">
                 <option value= "No Emulator" selected="selected">Do not use the Emulator</option>"
                 <option value= "Emulator">Use the Emulator</option>"
-            </select>
+            </select>--->
 
             <select name="Informed">
                 <option value="Not Informed" selected="selected">Use random starting positions</option>
                 <option value="Informed">Use informed starting position</option>
             </select>
+            <br>
             {% if "SessionBackend" in session %}
                 <input type="text" name="SessionBackend" value={{session["SessionBackend"][9:-3]}}>
             {% else %}
                 <input type="text" name="SessionBackend" value="">
             {% endif %}
-
+            Session backend name for loading.
+            <br>
             {% if "Walkers" in session %}
                 <input type="text" name="Walkers" value={{session["Walkers"]}}>
             {% else %}
-                <input type="text" name="Walkers" value=25>
+                <input type="text" name="Walkers" value=10>
             {% endif %}
-
+            Number of Walkers (Recommend 2 times dimension).
+            <br>
             {% if "StepsPerClick" in session %}
                 <input type="text" name="StepsPerClick" value={{session["StepsPerClick"]}}>
             {% else %}
-                <input type="text" name="StepsPerClick" value=200>
+                <input type="text" name="StepsPerClick" value=1000>
             {% endif %}
+            Steps before refreshing results.
+            <br>
 
             <input type="submit" name="Submit_Options" value="Submit Options"/>
         </p>
