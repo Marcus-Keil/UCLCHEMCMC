@@ -1,0 +1,1 @@
+{"switch": 0, "collapse": 1, "desorb": 1, "initialDens": 100.0, "finalDens": 100000.0, "initialTemp": 10.0, "maxTemp": 300.0, "zeta": 1, "radfield": 1, "rin": 0, "rout": 0.05, "fr": 1, "currentTime": 0.0, "finalTime": 10000000.0}
