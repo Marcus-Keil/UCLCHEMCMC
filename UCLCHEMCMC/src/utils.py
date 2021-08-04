@@ -15,7 +15,7 @@ savedModelsColumns = ['phase', 'switch', 'collapse', 'readAbunds', 'writeStep', 
                       'ageOfCloudOut', 'hdensOut', 'cloudTempOut', 'avOut', 'radiationOut', 'zetaOut', 'h2FormRateOut',
                       'fcOut', 'foOut', 'fmgOut', 'fheOut', 'deptOut', 'finalOnly', 'H', 'H+', 'H2']
 
-DBLocation = "../data/DefaultDatabase.db"
+DBLocation = "../data/Database_Temmplate.db"
 ChemFile = "../data/Chemicals.csv"
 Chem = pd.read_csv(ChemFile, delimiter=",/", engine='python')
 Lines = Chem.set_index('Chemical')["Lines"].to_dict()
