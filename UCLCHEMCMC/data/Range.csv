@@ -11,3 +11,5 @@ key:value
 "rout_high":10
 "Av_low":0.0001
 "Av_high":200
+"lineWidth_low":0.001
+"lineWidth_high":50

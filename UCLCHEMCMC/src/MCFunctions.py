@@ -37,13 +37,13 @@ SQLResultDict = SQLManager.dict()
 FortranManager = Bil.Manager()
 FortranQueue = FortranManager.Queue()
 FortranResultDict = FortranManager.dict()
-LikelihoodManager = Bil.Manager()
-LikelihoodDict = LikelihoodManager.dict()
-TimesBeforeShuffle = 3
-MinimumLikelihood = -1000
-
+NegInfStandIn = -np.inf
 OutputParameterDic = {'finalDens': 'Density', 'initialTemp': 'Temperature', 'rout': 'R_out', 'radfield': 'UV factro',
                       'zeta': 'CR factor'}
+
+CounterManager = Bil.Manager()
+Counts = CounterManager.Value('Counts', 0)
+AttemptSteps = CounterManager.Value('AttemptSteps', 0)
 
 
 def priorWithRangesUI(Parameters, ChangingParamsKeys, GridDictionary, RangesDict, UserRangesDict, FinalDensity):
@@ -68,12 +68,13 @@ def UILikelihood(ChangingParamsValues, PDLines, BaseParameterDict, ChangingParam
         if len(GridDictionary["finalDens"]) > ChangingParamsValues[ChangingParamsKeys.index("finalDens")] >= 0:
             FinalDensity = GridDictionary["finalDens"][ChangingParamsValues[ChangingParamsKeys.index("finalDens")]]
         else:
-            return -np.inf
+            return NegInfStandIn
     else:
         FinalDensity = BaseParameterDict["finalDens"]
-
-    if (priorWithRangesUI(ChangingParamsValues, ChangingParamsKeys, GridDictionary, RangesDict, UserRangesDict, FinalDensity) == 0):
-        ChangingParams = {ChangingParamsKeys[i]: GridDictionary[ChangingParamsKeys[i]][ChangingParamsValues[i]] for i in range(len(ChangingParamsKeys))}
+    if (priorWithRangesUI(ChangingParamsValues, ChangingParamsKeys, GridDictionary, RangesDict, UserRangesDict,
+                          FinalDensity) == 0):
+        ChangingParams = {ChangingParamsKeys[i]: GridDictionary[ChangingParamsKeys[i]][ChangingParamsValues[i]] for i in
+                          range(len(ChangingParamsKeys))}
         LinesOfInterest = []
         for i in range(PDLines.shape[0]):
             LinesOfInterest += [utils.chemDat(PDLines.iloc[i]["Chemical"])[:-4] + "_" + PDLines.iloc[i]["Line"] +
@@ -85,31 +86,21 @@ def UILikelihood(ChangingParamsValues, PDLines, BaseParameterDict, ChangingParam
                                                 LinesGiven=PDLines["Line"].values)
         if type(ModelData) == type(np.nan):
             if np.isnan(ModelData):
-                return -np.inf
+                return NegInfStandIn
         if (None in ModelData):
-            return -np.inf
-        for i in range(len(ModelData)):
-            if ModelData[i] == np.nan:
-                ModelData[i] = -10000000000000000000000000000000
-        sigma2 = sigmaObservation**2
-        PofDK = -0.5*np.sum(((observation - ModelData)**2)/sigma2)
-        Pid = str(os.getpid())
-        if Pid in LikelihoodDict:
-            if PofDK == LikelihoodDict[Pid][2]:
-                return -np.inf
-            elif PofDK == LikelihoodDict[Pid][0] and LikelihoodDict[Pid][1] < TimesBeforeShuffle:
-                LikelihoodDict[Pid][1] += 1
-            elif PofDK != LikelihoodDict[Pid][0]:
-                LikelihoodDict[Pid][0] = PofDK
-                LikelihoodDict[Pid][1] = 1
-            elif LikelihoodDict[Pid][1] >= TimesBeforeShuffle and PofDK <= MinimumLikelihood:
-                LikelihoodDict[Pid][2] = PofDK
-                return -np.inf
-        else:
-            LikelihoodDict[Pid] = [PofDK, 1, 0]
+            return NegInfStandIn
+        for i in ModelData:
+            if type(i) == type(np.nan):
+                if np.isnan(i):
+                    return NegInfStandIn
+            elif i == None:
+                return NegInfStandIn
+
+        sigma2 = sigmaObservation ** 2
+        PofDK = -0.5 * np.sum(((observation - ModelData) ** 2) / sigma2)
         return PofDK
     else:
-        return -np.inf
+        return NegInfStandIn
 
 
 def MCMCSavesGridUI(MCMCSaveFile, numberProcesses, ndim, nwalkers, nSteps, knownParams, unknownParamsKeys,
@@ -131,41 +122,17 @@ def MCMCSavesGridUI(MCMCSaveFile, numberProcesses, ndim, nwalkers, nSteps, known
     elif not os.path.isfile(MCMCSaveFile):
         backend = mc.backends.HDFBackend(MCMCSaveFile)
         backend.reset(nwalkers, ndim)
-    print(numberProcesses)
-    print(nwalkers)
-    print(nSteps)
     with BilPool.Pool(numberProcesses) as pool:
         pool.lost_worker_timeout = 500
         sampler = mc.EnsembleSampler(nwalkers, ndim, UILikelihood,
                                      args=((PDLines, knownParams, unknownParamsKeys, GridDictionary, RangesDict,
-                                            UserRangesDict)),
-                                     moves=[(mc.moves.DEMove(1e-02), 0.7), (mc.moves.DESnookerMove(), 0.3), ],
+                                            UserRangesDict, extraParams)),
+                                     moves=mc.moves.DEMove(1e-02),  # (mc.moves.DESnookerMove(), 0.3),],
                                      pool=pool, backend=backend, live_dangerously=True)
-        sampler.run_mcmc(startingPos, nSteps, progress=True, store=True)
+        sampler.run_mcmc(startingPos, nSteps, progress=True, store=True, skip_initial_state_check=True)
         pool.close()
         pool.join()
     return sampler
-
-
-def plotChainAndCornersWebUI(sampler, ndim, changingParamsKeys, GridDictionary, UserRangesDict):
-    samplesToUse = sampler.get_chain()
-    samples = samplesToUse.copy()
-    UserRangesArray = []
-    for N in range(ndim):
-        samples[:, :, N] = GridDictionary[changingParamsKeys[N]][samples.astype(int)[:, :, N]]
-        if changingParamsKeys[N] == "finalDens":
-            UserRangesArray += [(np.log10(GridDictionary[changingParamsKeys[N]][UserRangesDict[changingParamsKeys[N] + "_low"]]),
-                                 np.log10(GridDictionary[changingParamsKeys[N]][UserRangesDict[changingParamsKeys[N] + "_up"]]))]
-        else:
-            UserRangesArray += [(GridDictionary[changingParamsKeys[N]][UserRangesDict[changingParamsKeys[N]+"_low"]],
-                                 GridDictionary[changingParamsKeys[N]][UserRangesDict[changingParamsKeys[N]+"_up"]])]
-    flat_samples = sampler.get_chain(flat=True)
-    for N in range(ndim):
-        flat_samples[:, N] = GridDictionary[changingParamsKeys[N]][flat_samples.astype(int)[:, N]]
-    flat_samples[:, 0] = np.log10(flat_samples[:, 0])
-    grid = make_Grid(ndim, flat_samples, changingParamsKeys, GridDictionary)
-    js, tag = autoload_static(grid, CDN, "Corner Plot")
-    return js, tag
 
 
 def plotLastCornerWebUI(MCMCSaveFile, changingParamsKeys, GridDictionary, startingPos):
@@ -300,8 +267,8 @@ def make_Grid(ndim, flat_samples, ParameterNames, GridDictionary):
             else:
                 yAxisLabel = ''
                 yTickSize = '0pt'
-                currentYBins = np.linspace(flat_samples[:, i - 1].min() - 0.5, flat_samples[:, i - 1].max() + 0.5,
-                                           int(flat_samples[:, i - 1].max() - flat_samples[:, i - 1].min() + 2))
+                currentYBins = np.linspace(flat_samples[:, i-1].min() - 0.5, flat_samples[:, i-1].max() + 0.5,
+                                           int(flat_samples[:, i-1].max() - flat_samples[:, i-1].min() + 2))
             if i == ndim:
                 xAxisLabel = ParameterNames[j]
                 xTickSize = '10pt'
@@ -557,7 +524,6 @@ def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviation
         for line in LinesOfInterestDict[chems]:
             ReturnLines += [chemical + '_' + line]
     ReturnLines = np.asarray(ReturnLines)
-    print(UCLParamOut['hdensOut'].iloc[0] * UCLParamOut['H2'].iloc[0])
     if not all(ReturnLines) in UCLParamOut.columns:
         for i in ReturnLines:
             if i not in UCLParamOut.columns:

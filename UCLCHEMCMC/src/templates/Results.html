@@ -100,7 +100,7 @@
     </p>
     {{ Tag | safe }}
     <script>{{ JS | safe }}</script>
-    <h2> UCLCHEM Parameters and User Input</h2>
+    <h2> Parameters and User Input</h2>
     <h3> You chose the following options for the MCMC:</h3>
     <p>
         Grid: {{ session["Grid"] }} <br>
@@ -108,8 +108,9 @@
         Informed Starting Positions: {{ session["Informed"] }} <br>
         Session Name: {{ session["SessionBackend"] }}
     </p>
-    <h3> The Parameters used for UCLCHEM are as follows:</h3>
+    <h3> The Parameters used are as follows:</h3>
     <table>
+        <caption>Chemical Model Parameters</caption>
         <tr>
             <th>Parameter</th>
             <th>Lower bound || constant</th>
@@ -130,7 +131,7 @@
             {% endif %}
         </tr>
         <tr>
-            <td>Initial Temperature</td>
+            <td>Initial Kinetic Temperature</td>
             {% if "initialTemp" in session %}
                 <td> {{ session["initialTemp"] }}</td>
             {% else %}
@@ -144,7 +145,7 @@
             {% endif %}
         </tr>
         <tr>
-            <td>Cosmic ray factor</td>
+            <td>Cosmic Radiation factor</td>
             {% if "zeta" in session %}
                 <td> {{ session["zeta"] }}</td>
             {% else %}
@@ -170,8 +171,6 @@
             {% else %}
                 <td> Constant</td>
             {% endif %}
-
-
         </tr>
         <tr>
             <td>R<sub>out</sub></td>
@@ -186,22 +185,29 @@
             {% else %}
                 <td> Constant</td>
             {% endif %}
-
         </tr>
-        <!--<tr>
-            <td>Parameter</td>
-            {% if "Parameter" in session %}
-                <td> {{ session["Parameter"] }}</td>
+    </table>
+    <table>
+        <caption>Radiative Transfer Model Parameters</caption>
+        <tr>
+            <th>Parameter</th>
+            <th>Lower bound || constant</th>
+            <th>Upper bound</th>
+        </tr>
+        <tr>
+            <td>Line Width</td>
+            {% if "linewidth" in session %}
+                <td> {{ session["linewidth"] }}</td>
             {% else %}
-                <td> Value (Default)</td>
+                <td> 1 (Default)</td>
             {% endif %}
 
-            {% if "Parameter_up" in session %}
-                <td> {{ session["Parameter_up"] }}</td>
+            {% if "linewidth_up" in session %}
+                <td> {{ session["linewidth_up"] }}</td>
             {% else %}
                 <td> Constant</td>
             {% endif %}
-        </tr>-->
+        </tr>
     </table>
 
     <h3> The provided Observations are as follows: </h3>
