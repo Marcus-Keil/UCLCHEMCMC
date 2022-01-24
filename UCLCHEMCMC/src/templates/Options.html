@@ -22,19 +22,6 @@
     </p>
      <form action="" method="post">
         <p>
-            Which molecules and Lines do you wish to add?
-        </p>
-        <p>
-            <select name="Grid">
-                <option value= "Coarse" selected="selected">Coarse Grid</option>"
-                <option value= "Fine">Fine Grid</option>"
-            </select>
-
-            <!---<select name="Emulator">
-                <option value= "No Emulator" selected="selected">Do not use the Emulator</option>"
-                <option value= "Emulator">Use the Emulator</option>"
-            </select>--->
-
             <select name="Informed">
                 <option value="Not Informed" selected="selected">Use random starting positions</option>
                 <option value="Informed">Use informed starting position</option>
@@ -65,9 +52,13 @@
             <input type="submit" name="Submit_Options" value="Submit Options"/>
         </p>
     </form>
-    <h2> UCLCHEM Parameters and User Input</h2>
-    <h3> The Parameters used for UCLCHEM are as follows:</h3>
+    <h2> Parameters and User Input</h2>
+    <h3> The Parameters used are as follows:</h3>
+    <p>
+        Physical Parameters:
+    </p>
     <table>
+        <caption>Chemical Model Parameters</caption>
         <tr>
             <th>Parameter</th>
             <th>Lower bound || constant</th>
@@ -88,7 +79,7 @@
             {% endif %}
         </tr>
         <tr>
-            <td>Initial Temperature</td>
+            <td>Initial Kinetic Temperature</td>
             {% if "initialTemp" in session %}
                 <td> {{ session["initialTemp"] }}</td>
             {% else %}
@@ -128,8 +119,6 @@
             {% else %}
                 <td> Constant</td>
             {% endif %}
-
-
         </tr>
         <tr>
             <td>R<sub>out</sub></td>
@@ -144,22 +133,29 @@
             {% else %}
                 <td> Constant</td>
             {% endif %}
-
         </tr>
-        <!--<tr>
-            <td>Parameter</td>
-            {% if "Parameter" in session %}
-                <td> {{ session["Parameter"] }}</td>
+    </table>
+    <table>
+        <caption>Radiative Transfer Model Parameters</caption>
+        <tr>
+            <th>Parameter</th>
+            <th>Lower bound || constant</th>
+            <th>Upper bound</th>
+        </tr>
+        <tr>
+            <td>Line Width</td>
+            {% if "linewidth" in session %}
+                <td> {{ session["linewidth"] }}</td>
             {% else %}
-                <td> Value (Default)</td>
+                <td> 1 (Default)</td>
             {% endif %}
 
-            {% if "Parameter_up" in session %}
-                <td> {{ session["Parameter_up"] }}</td>
+            {% if "linewidth_up" in session %}
+                <td> {{ session["linewidth_up"] }}</td>
             {% else %}
                 <td> Constant</td>
             {% endif %}
-        </tr>-->
+        </tr>
     </table>
 
     <h3> The provided Observations are as follows: </h3>

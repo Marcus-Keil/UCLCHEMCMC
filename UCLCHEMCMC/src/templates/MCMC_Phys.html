@@ -17,6 +17,7 @@
         been changed to conform to the upper and lower bounds allowed by {{name}}.
     </p>
     <table>
+        <caption>Chemical Model Parameters</caption>
         <tr>
             <th>Parameter</th>
             <th>Lower bound || constant</th>
@@ -37,7 +38,7 @@
             {% endif %}
         </tr>
         <tr>
-            <td>Initial Temperature</td>
+            <td>Initial Kinetic Temperature</td>
             {% if "initialTemp" in session %}
                 <td> {{ session["initialTemp"] }}</td>
             {% else %}
@@ -77,8 +78,6 @@
             {% else %}
                 <td> Constant</td>
             {% endif %}
-
-
         </tr>
         <tr>
             <td>R<sub>out</sub></td>
@@ -93,22 +92,29 @@
             {% else %}
                 <td> Constant</td>
             {% endif %}
-
         </tr>
-        <!--<tr>
-            <td>Parameter</td>
-            {% if "Parameter" in session %}
-                <td> {{ session["Parameter"] }}</td>
+    </table>
+    <table>
+        <caption>Radiative Transfer Model Parameters</caption>
+        <tr>
+            <th>Parameter</th>
+            <th>Lower bound || constant</th>
+            <th>Upper bound</th>
+        </tr>
+        <tr>
+            <td>Line Width</td>
+            {% if "linewidth" in session %}
+                <td> {{ session["linewidth"] }}</td>
             {% else %}
-                <td> Value (Default)</td>
+                <td> 1 (Default)</td>
             {% endif %}
 
-            {% if "Parameter_up" in session %}
-                <td> {{ session["Parameter_up"] }}</td>
+            {% if "linewidth_up" in session %}
+                <td> {{ session["linewidth_up"] }}</td>
             {% else %}
                 <td> Constant</td>
             {% endif %}
-        </tr>-->
+        </tr>
     </table>
     <p>
         Are these parameters correct?

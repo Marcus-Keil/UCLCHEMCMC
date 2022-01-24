@@ -1,26 +1,128 @@
 import os
-import SpectralRadex.radex as radex
+import SpectralRadex.src.spectralradex.radex as radex
 import numpy as np
 import pandas as pd
 import sqlite3 as sql
 import time
+import json
 import MCFunctions as mcf
-os.environ["OMP_NUM_THREADS"] = "1"
+import GreLVG.GreLVG as glvg
 from uclchem import wrap as uclchem
 
-sleepTime = 1
-timeOutForSQL = 1000
-savedModelsColumns = ['phase', 'switch', 'collapse', 'readAbunds', 'writeStep', 'points', 'outSpecies', 'desorb',
-                      'initialDens', 'finalDens', 'initialTemp', 'maxTemp', 'zeta', 'radfield', 'rin', 'rout', 'fr',
-                      'ageOfCloudOut', 'hdensOut', 'cloudTempOut', 'avOut', 'radiationOut', 'zetaOut', 'h2FormRateOut',
-                      'fcOut', 'foOut', 'fmgOut', 'fheOut', 'deptOut', 'finalOnly', 'H', 'H+', 'H2']
+os.environ["OMP_NUM_THREADS"] = "1"
 
-DBLocation = "../data/Database_Temmplate.db"
+sleepTime = 0.1
+timeOutForSQL = 10000
+
+with open("../data/UCLCHEM_SavedModelsColumns.json") as jFile:
+    savedModelsColumns = json.load(jFile)
+#savedModelsColumns = ['phase', 'switch', 'collapse', 'readAbunds', 'writeStep', 'points', 'outSpecies', 'desorb',
+#                      'initialDens', 'finalDens', 'initialTemp', 'maxTemp', 'zeta', 'radfield', 'rin', 'rout', 'fr',
+#                      'ageOfCloudOut', 'hdensOut', 'cloudTempOut', 'avOut', 'radiationOut', 'zetaOut', 'h2FormRateOut',
+#                      'fcOut', 'foOut', 'fmgOut', 'fheOut', 'deptOut', 'finalOnly', 'H', 'H+', 'H2', 'lineWidth']
+
+#DBLocation = "../data/Database_Template.db"
+DBLocation = "../data/DefaultDatabase.db"
+#DBLocation = "../data/Database_Test.db"
 ChemFile = "../data/Chemicals.csv"
+
+Store_con = sql.connect(":memory:", check_same_thread=False)
+Store_cur = Store_con.cursor()
+
+Search_con = sql.connect(":memory:", check_same_thread=False)
+Search_cur = Search_con.cursor()
+
 Chem = pd.read_csv(ChemFile, delimiter=",/", engine='python')
 Lines = Chem.set_index('Chemical')["Lines"].to_dict()
 for C in Lines.keys():
     Lines[C] = np.asarray(Lines[C].split(", ")).astype(str)
+
+
+
+RadiativeCode_Keys = {'linewidth'}
+
+
+def InitDatabases(KnownParameters, UnknownParameters, Ranges, PDLinesJson):
+    Search_cur.execute('SELECT name FROM main.sqlite_master WHERE type="table" AND name="savedModels";')
+    fetched = Search_cur.fetchall()
+    if len(fetched) > 0:
+        return None
+    DiskDatabase = sql.connect(DBLocation)
+    DiskDatabase_cur = DiskDatabase.cursor()
+    LinesOfInterest = pd.read_json(PDLinesJson)
+    chemicals = np.asarray([chemDat(x) for x in LinesOfInterest['Chemical'].unique()])
+    ColumsToSearch = np.array([], dtype=str)
+    for index, row in LinesOfInterest.iterrows():
+        ColumsToSearch = np.append(ColumsToSearch, (chemDat(row['Chemical'])[:-4]+'_'+row['Line']+' GHz)_'+row['Units']))
+    DiskDatabase_cur.execute('SELECT name FROM main.sqlite_master WHERE type="table";')
+    Tables_Temp = DiskDatabase_cur.fetchall()
+    TablesToCopy = [Tables_Temp[x][0] for x in range(len(Tables_Temp))]
+    # Initiate database to be used for the new models that will be created
+    Store_cur.execute("ATTACH DATABASE '" + DBLocation + "' AS 'DiskDatabase';")
+    Search_cur.execute("ATTACH DATABASE '" + DBLocation + "' AS 'DiskDatabase';")
+    Store_con.commit()
+    Search_con.commit()
+    Conditions = ''
+    for k in KnownParameters.keys():
+        if k != 'outSpecies':
+            if Conditions != '':
+                Conditions += ' AND '
+            else:
+                Conditions += 'DiskDatabase."savedModels"."' + k + '" = ' + str(KnownParameters[k])
+    for k in UnknownParameters:
+        if Conditions != '':
+            Conditions += ' AND '
+        Conditions += 'DiskDatabase."savedModels"."' + k + '" >= ' + str(Ranges[k + '_low']) + \
+                      ' AND DiskDatabase."savedModels"."' + k + '" <= ' + str(Ranges[k + '_up'])
+    SearchIDS = Search_cur.execute(
+        'SELECT ModelID FROM DiskDatabase."savedModels" WHERE (' + Conditions + ');').fetchall()
+    for i in TablesToCopy:
+        if i != 'sqlite_sequence':
+            DiskDatabase_cur.execute('PRAGMA table_info("' + i + '");')
+            Col_Fetched = np.asarray(DiskDatabase_cur.fetchall())
+            StoreCol_Store = '('
+            SearchCol_Store = ''
+            for j in Col_Fetched:
+                if StoreCol_Store != '(':
+                    StoreCol_Store += ', '
+                Extras = ''
+                if j[3] == 1 or j[1] == 'ModelID':
+                    Extras += ' NOT NULL'
+                if j[5] == 1:
+                    Extras += ' PRIMARY KEY'
+                StoreCol_Store += '"' + j[1] + '" ' + j[2] + Extras
+                if j[1] in UnknownParameters or (i+'.dat' in chemicals and j[1] in ColumsToSearch):
+                    if SearchCol_Store != '':
+                        SearchCol_Store += ', '
+                    SearchCol_Store += 'DiskDatabase."' + i + '"."' + j[1] + '"'
+            StoreCol_Store += ');'
+            Store_cur.execute('CREATE TABLE "' + i + '"' + StoreCol_Store)
+            if SearchCol_Store != '':
+                Search_cur.execute('CREATE TABLE "' + i + '" AS SELECT ModelID, ' + SearchCol_Store +
+                                   ' FROM "' + i + '";')
+                if i == 'savedModels':
+                    Search_cur.execute('DELETE FROM main."' + i + '" WHERE main.ModelID NOT IN (' + str(SearchIDS)[1:-1] + ');')
+                    Search_con.commit()
+                else:
+                    Search_cur.execute('DELETE FROM main."' + i + '" WHERE main.ModelID NOT IN (' + str(SearchIDS)[1:-1] + ');')
+                    Search_con.commit()
+    Store_cur.execute("DETACH DATABASE 'DiskDatabase';")
+    Search_cur.execute("DETACH DATABASE 'DiskDatabase';")
+    DiskDatabase.close()
+    Store_con.commit()
+    Search_con.commit()
+    return None
+
+
+def UpdateSearchDatabase(table, SID):
+    Search_cur.execute('PRAGMA table_info("' + table + '");')
+    Col_Fetched = np.asarray(Search_cur.fetchall())
+    Search = 'SELECT "' + '", "'.join(Col_Fetched[:,1]) + '" FROM main."' + table + '";'
+    TempDF = pd.read_sql(Search, Store_con)
+    TempDF["ModelID"] = TempDF["ModelID"] + SID
+    TempDF.to_sql(table, Search_con, if_exists='append', index=False)
+    Search_con.commit()
+    return None
 
 
 def dict_factory(cursor, row):
@@ -106,15 +208,19 @@ def UCLChemDataFrames(UCLChemDict, Test=False, Queue=True):
     UCLChemDict["outSpecies"] = len(UniqueOutSpecieslist)
     if Queue:
         CurrentPID = os.getpid()
+        # Changes for GreLVG run
         mcf.FortranQueue.put(("RunUCLCHEM", [UCLChemDict, UCLChemDict['points'], CurrentPID, stepCount]))
         DictOfArrays = RetrieveFortranQueueResults(CurrentPID)
         parameterArray = DictOfArrays[0]
         chemicalAbunArray = DictOfArrays[1]
+        del DictOfArrays
     else:
         parameterArray = np.zeros(shape=(10000, UCLChemDict['points'], 12), dtype=np.float64, order='F')
         chemicalAbunArray = np.zeros(shape=(10000, UCLChemDict['points'], 215), dtype=np.float64, order='F')
+        allChemicalAbunArray = np.zeros(shape=(10000, UCLChemDict['points'], 215), dtype=np.float64, order='F')
         uclchem.to_df(dictionary=UCLChemDict, outspeciesin=UniqueOutSpeciesString, numberpoints=UCLChemDict['points'],
-                      parameterarray=parameterArray, chemicalabunarray=chemicalAbunArray, stepcount=stepCount)
+                      parameterarray=parameterArray, chemicalabunarray=chemicalAbunArray,
+                      allchemicalabunarray=allChemicalAbunArray, stepcount=stepCount)
     if UCLChemDict["finalOnly"]:
         stepCount[0] = 1
     parameterArray = parameterArray[:stepCount[0], :, :]
@@ -132,7 +238,7 @@ def UCLChemDataFrames(UCLChemDict, Test=False, Queue=True):
         physDF['H'] = chemicalAbunArray[:stepCount[0], 0, 0]
         physDF['H+'] = chemicalAbunArray[:stepCount[0], 0, 1]
         physDF['H2'] = chemicalAbunArray[:stepCount[0], 0, 2]
-        chemDF = pd.DataFrame(data=chemicalAbunArray[:, 0, 3:], columns=UniqueOutSpecieslist[3:])
+        chemDF = pd.DataFrame(data=chemicalAbunArray[:stepCount[0], 0, 3:], columns=UniqueOutSpecieslist[3:])
     else:
         exit("Currently unable to run with multiple Points")
     return physDF, chemDF
@@ -141,25 +247,31 @@ def UCLChemDataFrames(UCLChemDict, Test=False, Queue=True):
 def FortranUCLCHEM(dictionary, numberpoints, CurrentPID, stepCount):
     parameterArray = np.zeros(shape=(10000, dictionary['points'], 12), dtype=np.float64, order='F')
     chemicalAbunArray = np.zeros(shape=(10000, dictionary['points'], 215), dtype=np.float64, order='F')
+    allChemicalAbunArray = np.zeros(shape=(10000, dictionary['points'], 215), dtype=np.float64, order='F')
     with suppress_stdout_stderr():
         uclchem.to_df(dictionary=dictionary, outspeciesin=UniqueOutSpeciesString, numberpoints=numberpoints,
-                      parameterarray=parameterArray, chemicalabunarray=chemicalAbunArray, stepcount=stepCount)
+                      parameterarray=parameterArray, chemicalabunarray=chemicalAbunArray,
+                      allchemicalabunarray=allChemicalAbunArray, stepcount=stepCount)
     time.sleep(sleepTime)
-    mcf.FortranResultDict[str(CurrentPID)] = [parameterArray, chemicalAbunArray]
+    mcf.FortranResultDict[str(CurrentPID)] = [parameterArray, chemicalAbunArray, allChemicalAbunArray]
     return None
 
 
-def RadexForGrid(UCLChemDict, UCLParamDF, UCLChemDF, Queue=True, RotDia=False):
-    for k in range(np.shape(UCLParamDF)[0]):
+def RadexForGrid(ChemDict, ParamDF, ChemDF, Queue=True, RotDia=False):
+    for k in range(np.shape(ParamDF)[0]):
         radexDic = radex.get_default_parameters()
-        radexDic['tkin'] = UCLParamDF.loc[k, 'cloudTempOut']
-        radexDic['h2'] = UCLParamDF.loc[k, 'hdensOut']*UCLParamDF.loc[k, 'H2']
-        radexDic['h'] = UCLParamDF.loc[k, 'hdensOut']
-        radexDic['h+'] = UCLParamDF.loc[k, 'hdensOut']*UCLParamDF.loc[k, 'H+']
-        radexDic['e-'] = UCLParamDF.loc[k, 'hdensOut']*UCLParamDF.loc[k, 'H+']
-        radexDic['fmax'] = 1000.0
-        for i in UCLChemDF.columns:
-            radexDic['cdmol'] = UCLChemDF.loc[k, i] * 1.6e21 * UCLParamDF.loc[k, 'avOut']
+        radexDic['tkin'] = ParamDF.loc[k, 'cloudTempOut']
+        radexDic['h2'] = ParamDF.loc[k, 'hdensOut']*ParamDF.loc[k, 'H2']
+        radexDic['h'] = ParamDF.loc[k, 'hdensOut']
+        radexDic['h+'] = ParamDF.loc[k, 'hdensOut']*ParamDF.loc[k, 'H+']
+        radexDic['e-'] = ParamDF.loc[k, 'hdensOut']*ParamDF.loc[k, 'H+']
+        radexDic['fmin'] = 35.0
+        radexDic['fmax'] = 950.0
+        for key in RadiativeCode_Keys:
+            if key in ChemDict.keys():
+                radexDic[key] = ChemDict[key]
+        for i in ChemDF.columns:
+            radexDic['cdmol'] = ChemDF.loc[k, i] * 1.6e21 * ParamDF.loc[k, 'avOut']
             if 1e5 <= radexDic['cdmol'] <= 1e25:
                 for j in ReverseChemForUCLCHEM(i).split(", "):
                     radexDic['molfile'] = chemDat(j)
@@ -171,59 +283,67 @@ def RadexForGrid(UCLChemDict, UCLParamDF, UCLChemDF, Queue=True, RotDia=False):
                     if RadexDF is np.nan:
                         continue
                     if RotDia:
-                        UCLParamDF = RadexToDF(UCLChemDict, UCLParamDF, RadexDF, k, RotDia=True)
+                        ParamDF = RadexToDF(ChemDict, ParamDF, RadexDF, k, RotDia=True)
                     else:
-                        UCLParamDF = RadexToDF(UCLChemDict, UCLParamDF, RadexDF, k)
+                        ParamDF = RadexToDF(ChemDict, ParamDF, RadexDF, k)
                     #except:
                     #    pass
             else:
                 RadexDF = np.nan
                 continue
-    return UCLParamDF
+    return ParamDF
 
 
-def RadexToDF(UCLChemDict, UCLParamDF, RadexArray, indexOfModel, RotDia=False):
-    UCLChemDictKeys = [k for k in UCLChemDict]
-    UCLChemDictValues = [v for v in UCLChemDict.values()]
+def RadexToDF(ChemDict, ParamDF, RadexArray, indexOfModel, RotDia=False):
+    UCLChemDictKeys = [k for k in ChemDict]
+    UCLChemDictValues = [v for v in ChemDict.values()]
     for l in range(len(UCLChemDictKeys)):
-        UCLParamDF[UCLChemDictKeys[l]] = UCLChemDictValues[l]
+        ParamDF[UCLChemDictKeys[l]] = UCLChemDictValues[l]
     for j in range(np.shape(RadexArray)[0]):
         T_rColumnName = RadexArray[j, 0] + '_T_r'
-        if T_rColumnName not in UCLParamDF.columns:
-            UCLParamDF[T_rColumnName] = np.nan
         intColumnName = RadexArray[j, 0] + '_Intensity'
-        if intColumnName not in UCLParamDF.columns:
-            UCLParamDF[intColumnName] = np.nan
         fluColumnName = RadexArray[j, 0] + '_Flux'
-        if fluColumnName not in UCLParamDF.columns:
-            UCLParamDF[fluColumnName] = np.nan
-        UCLParamDF[T_rColumnName].iloc[indexOfModel] = RadexArray[j, 1]
-        UCLParamDF[intColumnName].iloc[indexOfModel] = RadexArray[j, 2]
-        UCLParamDF[fluColumnName].iloc[indexOfModel] = RadexArray[j, 3]
+        ParamDF[T_rColumnName] = RadexArray[j, 1]
+        ParamDF[intColumnName] = RadexArray[j, 2]
+        ParamDF[fluColumnName] = RadexArray[j, 3]
+        ParamDF = ParamDF.copy()
         if RotDia:
             EuColumnName = RadexArray[j, 0]+'_Eu'
-            if EuColumnName not in UCLParamDF.columns:
-                UCLParamDF[EuColumnName] = np.nan
-            UCLParamDF[RadexArray[j, 0]+'_Eu'].iloc[indexOfModel] = RadexArray[j, 4]
-    return UCLParamDF
+            if EuColumnName not in ParamDF.columns:
+                ParamDF[EuColumnName] = np.nan
+            ParamDF[RadexArray[j, 0]+'_Eu'].iloc[indexOfModel] = RadexArray[j, 4]
+    return ParamDF
 
 
 def runRadex(RadexParamDict, Queue=True, Upper=False):
     CurrentPID = os.getpid()
     if Queue:
+        Checks = ['e-', 'h+']
+        if (RadexParamDict['p-h2'] == 0):
+            RadexParamDict['p-h2'] = 0.25*RadexParamDict['h2']
+        if (RadexParamDict['o-h2'] == 0):
+            RadexParamDict['o-h2'] = 0.75*RadexParamDict['h2']
+        for col in Checks:
+            if col in RadexParamDict.keys():
+                if RadexParamDict[col] < 1.1e-3:
+                    RadexParamDict[col] = 1.1e-3
+                elif RadexParamDict[col] > 0.9e13:
+                    RadexParamDict[col] = 0.9e13
         mcf.FortranQueue.put(("RunRADEX", [RadexParamDict, CurrentPID]))
         dataFrame = RetrieveFortranQueueResults(CurrentPID)
+        if type(dataFrame) is type(None):
+            return np.nan
     else:
         dataFrame = radex.run(parameters=RadexParamDict)
     if dataFrame.empty:
         return np.nan
     OutputList = []
-    if "_" in dataFrame["QN Upper"].iloc[0] or " " in dataFrame["QN Upper"].iloc[0]:
+    if "_" in dataFrame["Qup"].iloc[0] or " " in dataFrame["Qup"].iloc[0]:
         for i in range(np.shape(dataFrame)[0]):
             TransitionName = RadexParamDict["molfile"][:-4] + "_(" + \
-                             dataFrame["QN Upper"].iloc[i].replace("_", ",").replace(" ", ",").replace(",,", ",") + \
+                             dataFrame["Qup"].iloc[i].replace("_", ",").replace(" ", ",").replace(",,", ",") + \
                              ")-(" + \
-                             dataFrame["QN Lower"].iloc[i].replace("_", ",").replace(" ", ",").replace(",,", ",") + \
+                             dataFrame["Qlow"].iloc[i].replace("_", ",").replace(" ", ",").replace(",,", ",") + \
                              ")(" + \
                              str(dataFrame["freq"].iloc[i]) + \
                              " GHz)"
@@ -237,8 +357,8 @@ def runRadex(RadexParamDict, Queue=True, Upper=False):
     else:
         for i in range(np.shape(dataFrame)[0]):
             TransitionName = RadexParamDict["molfile"][:-4] + "_" + \
-                             dataFrame["QN Upper"].iloc[i].replace("_", ",") + "-" + \
-                             dataFrame["QN Lower"].iloc[i].replace("_", ",") + "(" + \
+                             dataFrame["Qup"].iloc[i].replace("_", ",") + "-" + \
+                             dataFrame["Qlow"].iloc[i].replace("_", ",") + "(" + \
                              str(dataFrame["freq"].iloc[i]) + \
                              " GHz)"
             # Name, T_r, Intensity, Flux
@@ -268,40 +388,43 @@ def saveModel(UCLParamDF, ParamDict, CurrentPID):
     for i in UCLParamDF.columns.to_list():
         if i not in savedModelsColumns:
             nonSaveColumns += [i]
+
     UCLCHEMTransitionDF = UCLParamDF[nonSaveColumns]
     UCLParamDF = UCLParamDF.drop(nonSaveColumns, axis=1)
-    con = sql.connect(DBLocation, timeout=timeOutForSQL)
-    cur = con.cursor()
     RedundantCheckSearch = ''
     for i in range(len(UCLParamDF.columns)):
         if i == 0:
             if type(UCLParamDF[UCLParamDF.columns[i]].iloc[0]) == str:
-                RedundantCheckSearch = 'SELECT ModelID FROM savedModels WHERE "' + \
-                                       UCLParamDF.columns[i] + '" == "' + \
+                RedundantCheckSearch = 'SELECT "ModelID" FROM main."savedModels" WHERE "' + \
+                                       UCLParamDF.columns[i] + '" = "' + \
                                        UCLParamDF[UCLParamDF.columns[i]].iloc[0] + '"'
             else:
-                RedundantCheckSearch = 'SELECT ModelID FROM savedModels WHERE "' + \
-                                       UCLParamDF.columns[i] + '" == ' + \
+                RedundantCheckSearch = 'SELECT "ModelID" FROM main."savedModels" WHERE "' + \
+                                       UCLParamDF.columns[i] + '" = ' + \
                                        str(UCLParamDF[UCLParamDF.columns[i]].iloc[0])
         else:
             if type(UCLParamDF[UCLParamDF.columns[i]].iloc[0]) == str:
-                RedundantCheckSearch += ' AND "' + UCLParamDF.columns[i] + '" == "' + \
+                RedundantCheckSearch += ' AND "' + UCLParamDF.columns[i] + '" = "' + \
                                        UCLParamDF[UCLParamDF.columns[i]].iloc[0] + '"'
             else:
-                RedundantCheckSearch += ' AND "' + UCLParamDF.columns[i] + '" == ' + \
+                RedundantCheckSearch += ' AND "' + UCLParamDF.columns[i] + '" = ' + \
                                        str(UCLParamDF[UCLParamDF.columns[i]].iloc[0])
     RedundantCheckSearch += ';'
-    cur.execute(RedundantCheckSearch)
-    RedundantResults = cur.fetchone()
+    Store_cur.execute(RedundantCheckSearch)
+    RedundantResults = Store_cur.fetchone()
     if type(RedundantResults) == list:
-        con.close()
         return None
-    cur.execute('SELECT * FROM savedModels;')
-    UCLParamDF.to_sql(name='savedModels', if_exists='append', con=con, index=False)
-    cur.execute('SELECT * FROM savedModels;')
-    ThisEntryID = (cur.fetchall()[-1][0])
-    cur.execute("SELECT tbl_name FROM sqlite_master WHERE type='table';")
-    tables = cur.fetchall()
+    Search_cur.execute(RedundantCheckSearch)
+    RedundantResults = Search_cur.fetchone()
+    if type(RedundantResults) == list:
+        return None
+    # This needs to have a clause to allow for RAM Saved Model
+    Store_cur.execute('SELECT * FROM main."savedModels";')
+    UCLParamDF.to_sql(name='savedModels', if_exists='append', con=Store_con, index=False)
+    Store_cur.execute('SELECT * FROM main."savedModels";')
+    ThisEntryID = (Store_cur.fetchall()[-1][0])
+    Store_cur.execute("SELECT tbl_name FROM main.sqlite_master WHERE type='table';")
+    tables = Store_cur.fetchall()
     TablesList = []
     for i in tables:
         TablesList += [i[0]]
@@ -318,14 +441,14 @@ def saveModel(UCLParamDF, ParamDict, CurrentPID):
             if datFile not in TablesList:
                 command = 'CREATE TABLE "' + datFile + \
                           '" (ModelID INTEGER PRIMARY KEY AUTOINCREMENT, FOREIGN KEY(ModelID) REFERENCES savedModels (ModelID));'
-                cur.execute(command)
-                con.commit()
-            cur.execute('SELECT * FROM "' + datFile + '";')
-            columnsInSQL = [description[0] for description in cur.description]
+                Store_cur.execute(command)
+                Store_con.commit()
+            Store_cur.execute('SELECT * FROM main."' + datFile + '";')
+            columnsInSQL = [description[0] for description in Store_cur.description]
             for Column in list(set(columnsOfInterest) - set(columnsInSQL)):
                 command = 'ALTER TABLE "' + datFile + '" ADD "' + Column + '" REAL;'
-                cur.execute(command)
-                con.commit()
+                Store_cur.execute(command)
+                Store_con.commit()
             TempValueArray = ', '.join([str(x) for x in UCLCHEMTransitionDFTemp.to_numpy()[0].tolist()])
             TempValueArray = TempValueArray.replace("nan", "0")
             TempColumnsList = '", "'.join(UCLCHEMTransitionDFTemp.columns.to_list())
@@ -333,8 +456,8 @@ def saveModel(UCLParamDF, ParamDict, CurrentPID):
                 continue
             command = 'INSERT INTO "' + datFile + '"("' + TempColumnsList +'", ModelID) VALUES (' + \
                       str(TempValueArray) + ', ' + str(ThisEntryID) + ');'
-            cur.execute(command)
-            con.commit()
+            Store_cur.execute(command)
+            Store_con.commit()
         elif len(columnsOfInterest) > 1000:
             columnsLeft = columnsOfInterest
             itterations = int(len(columnsOfInterest) / 1000)
@@ -344,18 +467,15 @@ def saveModel(UCLParamDF, ParamDict, CurrentPID):
                 currentDat = datFile + '_' + str(k)
                 columnsThisLoop = columnsLeft[:1000]
                 columnsLeft = columnsLeft[1000:]
-                UCLCHEMTransitionDFTemp = UCLCHEMTransitionDF[columnsThisLoop]
                 if currentDat not in TablesList:
                     command = 'CREATE TABLE "' + currentDat + \
                               '" (ModelID INTEGER PRIMARY KEY AUTOINCREMENT, FOREIGN KEY(ModelID) REFERENCES savedModels (ModelID));'
-                    cur.execute(command)
-                    con.commit()
-                cur.execute('SELECT * FROM "' + currentDat + '";')
-                columnsInSQL = [description[0] for description in cur.description]
-                for Column in list(set(columnsThisLoop) - set(columnsInSQL)):
-                    command = 'ALTER TABLE "' + currentDat + '" ADD "' + Column + '" REAL;'
-                    cur.execute(command)
-                    con.commit()
+                    Store_cur.execute(command)
+                    Store_con.commit()
+                Store_cur.execute('SELECT * FROM main."' + currentDat + '";')
+                columnsInSQL = [description[0] for description in Store_cur.description]
+                columnsThisLoop = set(columnsThisLoop) - (set(columnsThisLoop) - set(columnsInSQL))
+                UCLCHEMTransitionDFTemp = UCLCHEMTransitionDF[columnsThisLoop]
                 TempValueArray = ', '.join([str(x) for x in UCLCHEMTransitionDFTemp.to_numpy()[0].tolist()])
                 TempValueArray = TempValueArray.replace("nan", "0")
                 TempColumnsList = '", "'.join(UCLCHEMTransitionDFTemp.columns.to_list())
@@ -363,9 +483,9 @@ def saveModel(UCLParamDF, ParamDict, CurrentPID):
                     continue
                 command = 'INSERT INTO "' + currentDat + '"("' + TempColumnsList +'", ModelID) VALUES (' + \
                       str(TempValueArray) + ', ' + str(ThisEntryID) + ');'
-                cur.execute(command)
-                con.commit()
-    con.close()
+                Store_cur.execute(command)
+                Store_con.commit()
+    # End of clause, for saving.
     mcf.SQLResultDict[str(CurrentPID)] = "Complete"
     return None
 
@@ -395,14 +515,14 @@ def retrieveLinesOfEntry(ModelID, LinesOfInterest, ChemsAndLinesDic):
         for i in range(len(ChemsAndLinesDic[dats])):
             if sqlSearch == None:
                 sqlSearch = 'SELECT "' + dats + '"."' + ChemsAndLinesDic[dats][i] + '"'
-                WhereString = ' WHERE "' + dats + '".ModelID == ' + str(ModelID[0]) + ';'
+                WhereString = ' WHERE "' + dats + '".ModelID = ' + str(ModelID[0]) + ';'
             else:
                 sqlSearch = sqlSearch + ', "' + dats + '"."' + ChemsAndLinesDic[dats][i] + '"'
         if FromString == "":
-            FromString = ' FROM "' + dats + '"'
+            FromString = ' FROM main."' + dats + '"'
             PreviousDat = dats
         else:
-            FromString += ' LEFT JOIN "' + dats + '" ON "' + PreviousDat + '".ModelID = "' + dats + '".ModelID'
+            FromString += ' LEFT JOIN main."' + dats + '" ON main."' + PreviousDat + '".ModelID = main."' + dats + '".ModelID'
             PreviousDat = dats
     if sqlSearch != None:
         sqlSearch = sqlSearch + FromString + WhereString
@@ -428,13 +548,13 @@ def retrieveEntry(ID, ModelParameters=False):
     if ModelParameters:
         sqlSearch = 'SELECT ModelID, phase, switch, collapse, readAbunds, writeStep, points, outSpecies, desorb, ' \
                     'initialDens, finalDens, initialTemp, maxTemp, zeta, radfield, rin, rout, fr, finalOnly' \
-                    ' FROM savedModels WHERE ModelID in ' + '(' + str(ID.tolist())[1:-1] + ');'
+                    ' FROM main."savedModels" WHERE ModelID in ' + '(' + str(ID.tolist())[1:-1] + ');'
         CurrentPID = os.getpid()
         mcf.SQLQueue.put(("Search", [sqlSearch, CurrentPID]))
         SearchResults = RetrieveQueueResults(CurrentPID)
     else:
         sqlSearch = 'SELECT ModelID, ageOfCloudOut, hdensOut, cloudTempOut, avOut, radiationOut, zetaOut, ' \
-                    '"h2FormRateOut", fcOut, foOut, fmgOut, fheOut, deptOut FROM savedModels WHERE ModelID in (' + \
+                    '"h2FormRateOut", fcOut, foOut, fmgOut, fheOut, deptOut FROM main."savedModels" WHERE ModelID in (' + \
                     str(ID.tolist())[1:-1] + ');'
         CurrentPID = os.getpid()
         mcf.SQLQueue.put(("Search", [sqlSearch, CurrentPID]))
@@ -476,40 +596,81 @@ def retrieveIntensitiesUI(ParameterDict, ChangingParams, LinesOfInterest, Chemic
 def checkAndRetrieveModel(ParameterDict, ChangingParamsKeys, ChangingParamsValues, Test=False):
     for i in range(len(ChangingParamsKeys)):
         if i == 0:
-            sqlSearch = 'SELECT ModelID FROM savedModels WHERE "' + ChangingParamsKeys[i] + '" == ' + str(
+            sqlSearch = 'SELECT ModelID FROM main."savedModels" WHERE "' + ChangingParamsKeys[i] + '" = ' + str(
                 ChangingParamsValues[i])
         else:
-            sqlSearch = sqlSearch + ' AND "' + ChangingParamsKeys[i] + '" == ' + str(ChangingParamsValues[i])
+            sqlSearch = sqlSearch + ' AND "' + ChangingParamsKeys[i] + '" = ' + str(ChangingParamsValues[i])
+    if "midDens" in ParameterDict.keys():
+        sqlSearch = sqlSearch + ' AND "phase" = 4'
     sqlSearch = sqlSearch + ';'
     CurrentPID = os.getpid()
     mcf.SQLQueue.put(("Search", [sqlSearch, CurrentPID]))
     SearchResults = RetrieveQueueResults(CurrentPID)
-    if len(SearchResults) < 1 or SearchResults.values[0, 0] != None:
+    mcf.AttemptSteps.value += 1
+    if len(SearchResults) < 1 or SearchResults.values[0, 0] == None:
         if "finalOnly" in ParameterDict:
             ParameterDict["finalOnly"] = str(bool(ParameterDict["finalOnly"][0]))
         if len(SearchResults) < 1:
-            ParamDF, ChemDF = UCLChemDataFrames(UCLChemDict=ParameterDict)
-            UCLParamOut = RadexForGrid(UCLChemDict=ParameterDict, UCLParamDF=ParamDF,
-                                       UCLChemDF=ChemDF)
+            ParamDF, ChemDF = UCLChemDataFrames(UCLChemDict={k: ParameterDict[k] for k in ParameterDict.keys() -
+                                                             RadiativeCode_Keys})
+            # Make changes for GreLVG
+            UCLParamOut = RadexForGrid(ChemDict=ParameterDict, ParamDF=ParamDF,
+                                       ChemDF=ChemDF)
             if Test:
                 return UCLParamOut
+            if "midDens" in ParamDF.columns:
+                UCLParamOut["phase"] = UCLParamOut["phase"].apply(lambda x: 4)
             mcf.SQLQueue.put(("Save", [UCLParamOut, ParameterDict, CurrentPID]))
             CompleteCheck = RetrieveQueueResults(CurrentPID)
             del CompleteCheck
-            mcf.SQLQueue.put(("Search", [sqlSearch, CurrentPID]))
+            mcf.SQLQueue.put(("Search", [sqlSearch, CurrentPID, True]))
             SearchResults = RetrieveQueueResults(CurrentPID)
+    else:
+        mcf.Counts.value += 1
     return SearchResults.values.T[0]
 
 
-def PDSearchFunction(Search, PID):
-    con = sql.connect(DBLocation, timeout=timeOutForSQL)
-    Results = pd.read_sql(sql=Search, con=con)
-    con.close()
+def PDSearchFunction(Search, PID, PostSave=False):
+    if PostSave:
+        Results = pd.read_sql(sql=Search, con=Store_con)
+    else:
+        Results = pd.read_sql(sql=Search, con=Search_con)
     if Results.empty:
         for col in Results.columns:
             if col != "ModelID":
                 Results[col].values[:] = np.nan
     mcf.SQLResultDict[str(PID)] = Results
+    return None
+
+def FlushStore(PID):
+    DiskDatabase = sql.connect(DBLocation)
+    DiskDatabase_cur = DiskDatabase.cursor()
+    StartingID = DiskDatabase_cur.execute('SELECT Max(ModelID) FROM main."savedModels";').fetchone()[0]
+    if StartingID == None:
+        StartingID = 0
+    DiskDatabase_cur.execute('SELECT name FROM main.sqlite_master WHERE type="table";')
+    Tables_Temp = DiskDatabase_cur.fetchall()
+    Search_cur.execute('SELECT name FROM main.sqlite_master WHERE type="table";')
+    SearchTables_Temp = Search_cur.fetchall()
+    SearchTables = [SearchTables_Temp[x][0] for x in range(len(SearchTables_Temp))]
+    Store_cur.execute('ATTACH DATABASE "' + DBLocation + '" AS DiskDatabase;')
+    Tables = [Tables_Temp[x][0] for x in range(len(Tables_Temp))]
+    for table in Tables:
+        if table != 'sqlite_sequence':
+            Search = 'SELECT * FROM main."' + table + '";'
+            TempDF = pd.read_sql(Search, Store_con)
+            TempDF["ModelID"] = TempDF["ModelID"] + StartingID
+            TempDF.to_sql(table, DiskDatabase, if_exists='append', index=False)
+            DiskDatabase.commit()
+            if table in SearchTables:
+                UpdateSearchDatabase(table, StartingID)
+            del TempDF, Search
+            Store_cur.execute('DELETE FROM main."' + table + '" WHERE ModelID >= 0;')
+            Store_con.commit()
+    Store_cur.execute('DETACH DATABASE DiskDatabase;')
+    DiskDatabase.commit()
+    DiskDatabase.close()
+    mcf.SQLResultDict[str(PID)] = "Complete"
     return None
 
 
@@ -619,7 +780,9 @@ def ReverseChemForUCLCHEM(i):
         'H2S': 'o-H2S, p-H2S',
         'SIC2': 'o-SiC2',
         'SIS': 'SiS',
-        'SO': 'SO'}
+        'SO': 'SO',
+        'SO2': 'SO2'
+    }
     return switcher.get(i, i + " is an invalid chemical given to ReverseChemForUCLCHEM")
 
 
@@ -678,7 +841,9 @@ def chemDat(i):
         'p-H2S': 'ph2s.dat',
         'o-SiC2': 'o-sic2.dat',
         'SiS': 'sis.dat',
-        'SO': 'so@lique.dat'}
+        'SO': 'so@lique.dat',
+        'SO2': 'so2-highT.dat'
+    }
     return switcher.get(i, i + " is an invalid chemical given to chemDat")
 
 
@@ -722,11 +887,13 @@ BoolDict["Running"] = True
 
 
 def StopManager():
+    #while (len(mcf.SQLQueue) > 0 or len(mcf.FortranQueue) > 0):
+    #    BoolDict["Running"] = True
     BoolDict["Running"] = False
 
 
 def worker_main():
-    FuncDict = {"Search": PDSearchFunction, "Save": saveModel, "Stop": StopManager}
+    FuncDict = {"Search": PDSearchFunction, "Save": saveModel, "Flush": FlushStore, "Stop": StopManager}
     while BoolDict["Running"]:
         f, args = mcf.SQLQueue.get()
         FuncDict[f](*args)

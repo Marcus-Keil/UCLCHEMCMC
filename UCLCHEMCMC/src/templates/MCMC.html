@@ -34,38 +34,15 @@
         <a href="https://github.com/uclchem/UCLCHEM" target="_blank">Github Page</a>. For a brief overview
         see the <a href="/About">about page</a>.
     </p>
+    {% if "Grid" in session %}
     <form action="" method="post">
         <table>
+            <caption>Chemical Model Parameters</caption>
             <tr>
                 <th>Parameter</th>
                 <th>Lower bound || constant</th>
                 <th>Upper bound</th>
             </tr>
-            <!--<tr>
-                <td>Phase (1 or 2)</td>
-                <td><input type="text" name="phase" value={{session["phase"]}}></td>
-                <td>Not Applicable</td>
-            </tr>-->
-            <!--<tr>
-                <td>Switch (0 or 1)</td>
-                <td><input type="text" name="switch" value={{session["switch"]}}></td>
-                <td>Not Applicable</td>
-            </tr>-->
-            <!--<tr>
-                <td>Collapse (0 or 1)</td>
-                <td><input type="text" name="collapse" value={{session["collapse"]}}></td>
-                <td>Not Applicable</td>
-            </tr>-->
-            <!--<tr>
-                <td>Desorbtion (0 or 1) </td>
-                <td><input type="text" name="desorb" value={{session["desorb"]}}></td>
-                <td>Not Applicable</td>
-            </tr>-->
-            <!--<tr>
-                <td>Initial Density</td>
-                <td><input type="text" name="initialDens" value={{session["initialDens"]}}></td>
-                <td><input type="text" name="initialDens_up" value={{session["initialDens_up"]}}></td>
-            </tr>-->
             <tr>
                 <td>Final Density</td>
                 <td><input type="text" name="finalDens" value={{session["finalDens"]}}></td>
@@ -76,11 +53,6 @@
                 <td><input type="text" name="initialTemp" value={{session["initialTemp"]}}></td>
                 <td><input type="text" name="initialTemp_up" value={{session["initialTemp_up"]}}></td>
             </tr>
-            <!--<tr>
-                <td>Maximum Temperature</td>
-                <td><input type="text" name="maxTemp" value={{session["maxTemp"]}}></td>
-                <td><input type="text" name="maxTemp_up" value={{session["maxTemp_up"]}}></td>
-            </tr>-->
             <tr>
                 <td>Cosmic radiation factor</td>
                 <td><input type="text" name="zeta" value={{session["zeta"]}}></td>
@@ -96,15 +68,32 @@
                 <td><input type="text" name="rout" value={{session["rout"]}}></td>
                 <td><input type="text" name="rout_up" value={{session["rout_up"]}}></td>
             </tr>
-            <!--<tr>
-                <td></td>
-                <td><input type="text" name="" value={{session[""]}}></td>
-                <td><input type="text" name="" value={{session[""]}}></td>
-            </tr>-->
+        </table>
+        <table>
+            <caption>Radiative Transfer Model Parameters</caption>
+            <tr>
+                <th>Parameter</th>
+                <th>Lower bound || constant</th>
+                <th>Upper bound</th>
+            </tr>
+
+            <tr>
+                <td>Line Width</td>
+                <td><input type="text" name="linewidth" value={{session["linewidth"]}}></td>
+                <td><input type="text" name="linewidth_up" value={{session["linewidth_up"]}}></td>
+            </tr>
         </table>
         <p align="right">
             <input type="submit" value="submit"/>
         </p>
-
     </form>
+    {% else %}
+    <form action="" method="post">
+        <select name="Grid">
+            <option value= "Coarse" selected="selected">Coarse Grid</option>
+            <option value= "Fine">Fine Grid</option></select>
+        <input type="submit" name="Add_Grid" value="Select Grid"/>
+    </form>
+    {% endif %}
+
 {% endblock %}
