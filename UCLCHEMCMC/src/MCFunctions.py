@@ -21,32 +21,34 @@ import utils
 os.environ["OMP_NUM_THREADS"] = "1"
 matplotlib.use("Agg")
 
-TMin = 3
-TMax = 40
-rhoMin = 1e3
-rhoMax = 1e10
-AvMin = 0.001
-AvMax = 200
-
-rangeForCorners = [(np.log10(rhoMin), np.log10(rhoMax)), (TMin, TMax),
-                   ((1.6e21 * AvMin)/(1e6 * 3.086e+18), (1.6e21 * AvMax)/(1e6 * 3.086e+18))]
-
+#Initialisation of the Managers for the SQL and Fortran workers.
 SQLManager = Bil.Manager()
 SQLQueue = SQLManager.Queue()
 SQLResultDict = SQLManager.dict()
 FortranManager = Bil.Manager()
 FortranQueue = FortranManager.Queue()
 FortranResultDict = FortranManager.dict()
+
+# Negative infinity stand in for the prior, in case a different value is desired
 NegInfStandIn = -np.inf
+# Dictionary to define how the parameters should look on the final plot, rather than the code based naming convention
 OutputParameterDic = {'finalDens': 'Density', 'initialTemp': 'Temperature', 'rout': 'R_out', 'radfield': 'UV factro',
                       'zeta': 'CR factor'}
 
-CounterManager = Bil.Manager()
-Counts = CounterManager.Value('Counts', 0)
-AttemptSteps = CounterManager.Value('AttemptSteps', 0)
-
 
 def priorWithRangesUI(Parameters, ChangingParamsKeys, GridDictionary, RangesDict, UserRangesDict, FinalDensity):
+    """
+    Prior function that checks if all parameters that the MCMC changes are within the values the user provided
+
+    Args:
+        Parameters: Value of the changing parameters
+        ChangingParamsKeys: Keys of the dictionary of the parameters that are allowed to change
+        GridDictionary: Dictionary containing the arrays of the grid for each parameter
+        RangesDict: Dictionary containing the upper and lower ends of the allowed ranges in grid space
+        UserRangesDict: Dictionary containing the upper and lower ends of the allowed ranges in parameter space
+        FinalDensity: The final density that the current model has, to be used with rout to make sure that AV
+            stays within acceptable ranges based on inputs from the user
+    """
     for i in range(len(Parameters)):
         if Parameters[i] < UserRangesDict[ChangingParamsKeys[i]+"_low"] or Parameters[i] >= \
                 UserRangesDict[ChangingParamsKeys[i]+"_up"] or np.isnan(Parameters[i]):
@@ -60,6 +62,18 @@ def priorWithRangesUI(Parameters, ChangingParamsKeys, GridDictionary, RangesDict
 
 def UILikelihood(ChangingParamsValues, PDLines, BaseParameterDict, ChangingParamsKeys,
                  GridDictionary, RangesDict, UserRangesDict):
+    """
+    Likelihood function for the MCMC inference which will also call the requierd functions to create or retrieve models
+
+    Args:
+        ChangingParamsValues: List of the values for the current MCMC walkers step
+        PDLines: Pandas dataframe of the lines given by the user
+        BaseParameterDict: The basic UCLCHEM and RADEX parameters, that are not changing for the inference
+        ChangingParamsKeys: Keys of the dictionary of the parameters that are allowed to change
+        GridDictionary: Dictionary containing the arrays of the grid for each parameter
+        RangesDict: Dictionary containing the upper and lower ends of the allowed ranges in grid space
+        UserRangesDict: Dictionary containing the upper and lower ends of the allowed ranges in parameter space
+    """
     ChangingParamsValues = ChangingParamsValues.astype(int)
     observation = PDLines["Intensity"].values
     sigmaObservation = PDLines["Sigma"].values
@@ -105,6 +119,25 @@ def UILikelihood(ChangingParamsValues, PDLines, BaseParameterDict, ChangingParam
 
 def MCMCSavesGridUI(MCMCSaveFile, numberProcesses, ndim, nwalkers, nSteps, knownParams, unknownParamsKeys,
                     startingPos, GridDictionary, RangesDict, PDLinesJson, UserRangesDict):
+    """
+    This function calls the MCMC after checking if the inference has previously been started and loading the
+    walker file if it has. This also creates the worker pool the walkers have access to.
+
+    Args:
+        MCMCSaveFile: name of the current session for sake of storing the MCMC model and user input
+        numberProcesses: number of processor cores that the walkers are allowed to use, not including the workers
+            for the Fortran and SQL management
+        ndim: number of dimension that the infernce has
+        nwalkers: number of walkers the MCMC inference is using
+        nSteps: number of steps to take prior to saving the current state
+        knownParams: list of parameter names that will not be changing during the inference
+        unknownParamsKeys: Keys of the dictionary of the parameters that are allowed to change
+        startingPos: Values of the starting position of the Inference
+        GridDictionary: Dictionary containing the arrays of the grid for each parameter
+        RangesDict: Dictionary containing the upper and lower ends of the allowed ranges in grid space
+        PDLinesJson: Pandas dataframe of the lines given by the user as a JSON object
+        UserRangesDict: Dictionary containing the upper and lower ends of the allowed ranges in parameter space
+    """
     os.environ["OMP_NUM_THREADS"] = "1"
     PDLines = pd.read_json(PDLinesJson)
     if os.path.isfile(MCMCSaveFile):
@@ -126,7 +159,7 @@ def MCMCSavesGridUI(MCMCSaveFile, numberProcesses, ndim, nwalkers, nSteps, known
         pool.lost_worker_timeout = 500
         sampler = mc.EnsembleSampler(nwalkers, ndim, UILikelihood,
                                      args=((PDLines, knownParams, unknownParamsKeys, GridDictionary, RangesDict,
-                                            UserRangesDict, extraParams)),
+                                            UserRangesDict)),
                                      moves=mc.moves.DEMove(1e-02),  # (mc.moves.DESnookerMove(), 0.3),],
                                      pool=pool, backend=backend, live_dangerously=True)
         sampler.run_mcmc(startingPos, nSteps, progress=True, store=True, skip_initial_state_check=True)
@@ -136,6 +169,11 @@ def MCMCSavesGridUI(MCMCSaveFile, numberProcesses, ndim, nwalkers, nSteps, known
 
 
 def plotLastCornerWebUI(MCMCSaveFile, changingParamsKeys, GridDictionary, startingPos):
+    """
+
+    Args:
+        
+    """
     startingPosArray = np.asarray(startingPos.copy())
     nwalkers, ndim = startingPosArray.shape
     for keys in GridDictionary.keys():
@@ -163,6 +201,11 @@ def plotLastCornerWebUI(MCMCSaveFile, changingParamsKeys, GridDictionary, starti
 
 
 def make_Hist(hist, edges, CurrentGrid, xAxisLabel = '', yAxisLabel = '', width=100):
+    """
+
+    Args:
+
+    """
     if xAxisLabel != '':
         height = width + 37
     else:
@@ -196,6 +239,11 @@ def make_Hist(hist, edges, CurrentGrid, xAxisLabel = '', yAxisLabel = '', width=
 
 
 def make_HM(hist, xedge, yedge, XGrid, YGrid, xAxisLabel = '', yAxisLabel = '', width=100):
+    """
+
+    Args:
+
+    """
     values = np.unique(hist)
     for i in range(len(values)):
         hist = np.where(hist == values[i], i, hist)
@@ -249,6 +297,11 @@ def make_HM(hist, xedge, yedge, XGrid, YGrid, xAxisLabel = '', yAxisLabel = '', 
 
 
 def make_Grid(ndim, flat_samples, ParameterNames, GridDictionary):
+    """
+
+    Args:
+
+    """
     defaultWidth = int(800 / ndim)
     allDimensions = []
     for i in range(1, ndim+1):
@@ -310,6 +363,11 @@ def make_Grid(ndim, flat_samples, ParameterNames, GridDictionary):
 
 def CornerPlots(SessionName, Parameters, GridType='Coarse', BurnIn=-1, PlotChains = False,
                 CornerPackagePlot=False, PlotGivenValues=False, GivenValues=[],ReturnMostProbable=False):
+    """
+
+    Args:
+
+    """
     if PlotGivenValues and (GivenValues == [] or len(Parameters) != len(GivenValues)):
         print("GivenValues must have the same number of entries as Parameters, if you set PlotGivenValues to True."
               "Set Values to -1 if you wish a Parameter to not have a value value plotted for it.")
@@ -510,6 +568,11 @@ def CornerPlots(SessionName, Parameters, GridType='Coarse', BurnIn=-1, PlotChain
 
 
 def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviationSpread=0.1, WithError=False):
+    """
+
+    Args:
+
+    """
     BaseDictionary = {"phase": 1, "switch": 1, "collapse": 1, "readAbunds": 0, "writeStep": 1, "points": 1, "desorb": 1,
                       "finalOnly": "True", "fr": 1.0}
     UCLCHEMDict = {**BaseDictionary, **ChangingParameters}
@@ -541,6 +604,11 @@ def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviation
 
 
 def MakeRotationData(ChangingParameters, LinesOfInterestDict, StandardDeviationSpread=0.1, WithError=False):
+    """
+
+    Args:
+
+    """
     BaseDictionary = {"phase": 1, "switch": 1, "collapse": 1, "readAbunds": 0, "writeStep": 1, "points": 1, "desorb": 1,
                       "finalOnly": "True", "fr": 1.0}
     UCLCHEMDict = {**BaseDictionary, **ChangingParameters}

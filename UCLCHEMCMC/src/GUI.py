@@ -52,11 +52,6 @@ Chemicals = list(Lines.keys())
 Chemicals += ['']
 
 
-# File that contains the Ranges that are allowed
-#RangesFile = "../data/Range.csv"
-#Ranges = pd.read_csv(RangesFile, delimiter=":", engine='python')
-#ParameterRanges = Ranges.set_index("key")['value'].to_dict()
-
 # The physical parameters that are allowed to be changed
 with open("../data/UCLCHEM_ChangeableParameterNames.json") as jFile:
     ChemicalCode_Parameters = json.load(jFile)
@@ -120,6 +115,11 @@ def CountRet():
 def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
             MCMCFile, GridDictionary, Informed=False, Walkers=MCMCwalkers,
             StepsPerClick=MCMCStepsPerRun, StepsPerSave=MCMCStepsPerItteration, startPoints=[]):
+    """
+
+    Args:
+
+    """
     ParameterRanges = {}
     for P in GridDictionary.keys():
         Array = np.array(GridDictionary[P]).astype(np.float)
@@ -193,6 +193,11 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
 # =========================================================================================================
 @celery.task(bind=True)
 def RunUCLCHEMAlone(self, UCLCHEMDict):
+    """
+
+    Args:
+
+    """
     UCLCHEMDict["phase"] = int(1)
     UCLCHEMDict["switch"] = int(UCLCHEMDict["switch"])
     UCLCHEMDict["collapse"] = int(UCLCHEMDict["collapse"])
@@ -225,6 +230,11 @@ def RunUCLCHEMAlone(self, UCLCHEMDict):
 # =========================================================================================================
 @app.route('/')
 def Index():
+    """
+
+    Args:
+
+    """
     session.clear()
     return render_template('index.html', name=CodeName)
 # =========================================================================================================
@@ -234,6 +244,11 @@ def Index():
 # =========================================================================================================
 @app.route('/MCMCInference/', methods=["POST", "GET"])
 def MCMC():
+    """
+
+    Args:
+
+    """
     if request.method == "POST":
         if 'Load_Session' in request.form and request.form['Session_name'] != '':
             SessionName = SaveFolder + request.form['Session_name']
@@ -326,6 +341,11 @@ def MCMC():
 # =========================================================================================================
 @app.route('/MCMCInference/Phys', methods=["POST", "GET"])
 def MCMCPhys():
+    """
+
+    Args:
+
+    """
     if request.method == "POST":
         return redirect(url_for("MCMCChem"))
     else:
@@ -338,6 +358,11 @@ def MCMCPhys():
 # =========================================================================================================
 @app.route('/MCMCInference/Chem', methods=["POST", "GET"])
 def MCMCChem():
+    """
+
+    Args:
+
+    """
     if "outSpecies" in session:
         NewChem = [Chem for Chem in Chemicals if Chem not in session["outSpecies"]]
     else:
@@ -411,6 +436,11 @@ def MCMCChem():
 # =========================================================================================================
 @app.route('/UCLCHEM/', methods=["POST", "GET"])
 def UCLCHEM():
+    """
+
+    Args:
+
+    """
     UCLCHEMDict = {}
     for parameter in Online_UCLCHEMParameters:
         UCLCHEMDict[parameter] = Online_UCLCHEMDefaults[parameter]
@@ -434,11 +464,21 @@ def UCLCHEM():
 # =========================================================================================================
 @app.route('/UCLCHEM/PhysResults', methods=["GET"])
 def UCLCHEMPhysResults():
+    """
+
+    Args:
+
+    """
     return render_template('UCLCHEMPhysResults.html', name=CodeName, session=session)
 
 
 @app.route('/UCLCHEM/ChemResults', methods=["GET"])
 def UCLCHEMChemResults():
+    """
+
+    Args:
+
+    """
     return render_template('UCLCHEMChemResults.html', name=CodeName, session=session)
 # =========================================================================================================
 
@@ -446,6 +486,11 @@ def UCLCHEMChemResults():
 # =========================================================================================================
 @app.route('/MCMCInference/Options', methods=["POST", "GET"])
 def Options():
+    """
+
+    Args:
+
+    """
     if request.method == "POST":
         session["Informed"] = request.form["Informed"]
         session["Walkers"] = request.form["Walkers"]
@@ -477,6 +522,11 @@ def Options():
 # =========================================================================================================
 @app.route('/MCMCInference/Results', methods=["POST", "GET"])
 def Results():
+    """
+
+    Args:
+
+    """
     ChangingParamList = []
     ChangingDictRange = {}
     BaseDict = ChemicalCode_UnchangableParameters.copy()
@@ -545,6 +595,11 @@ def Results():
 
 @app.route('/UCLCHEM/UCLCHEMTask', methods=['POST'])
 def UCLCHEMTask():
+    """
+
+    Args:
+
+    """
     UCLCHEMDict = session["UCLCHEMDict"]
     task = RunUCLCHEMAlone.apply_async(args=[UCLCHEMDict])
     return jsonify({}), 202, {'Location': url_for('UCLCHEMTaskStatus', task_id=task.id)}
@@ -552,6 +607,11 @@ def UCLCHEMTask():
 
 @app.route('/UCLCHEM/UCLCHEMTask', methods=['POST'])
 def UCLCHEMTask():
+    """
+
+    Args:
+
+    """
     UCLCHEMDict = session["UCLCHEMDict"]
     task = RunUCLCHEMAlone.apply_async(args=[UCLCHEMDict])
     return jsonify({}), 202, {'Location': url_for('UCLCHEMTaskStatus', task_id=task.id)}
@@ -559,6 +619,11 @@ def UCLCHEMTask():
 
 @app.route('/UCLCHEM/status/<task_id>')
 def UCLCHEMTaskStatus(task_id):
+    """
+
+    Args:
+
+    """
     task = RunUCLCHEMAlone.AsyncResult(task_id)
     if task.state == 'PENDING':
         response = {
@@ -589,6 +654,11 @@ def UCLCHEMTaskStatus(task_id):
 
 @app.route('/MCMCInference/Results/longtask', methods=['POST'])
 def longtask():
+    """
+
+    Args:
+
+    """
     ChangingParamList = []
     ChangingDictRange = {}
     BaseDict = ChemicalCode_UnchangableParameters.copy()
@@ -621,6 +691,11 @@ def longtask():
 
 @app.route('/MCMCInference/Results/status/<task_id>')
 def taskstatus(task_id):
+    """
+
+    Args:
+
+    """
     task = RunMCMC.AsyncResult(task_id)
     if task.state == 'PENDING':
         response = {
@@ -660,6 +735,11 @@ def taskstatus(task_id):
 # =========================================================================================================
 @app.route('/About')
 def About():
+    """
+
+    Args:
+
+    """
     return render_template('about.html', name=CodeName)
 # =========================================================================================================
 
@@ -668,6 +748,11 @@ def About():
 # =========================================================================================================
 @app.route('/Citation')
 def Citation():
+    """
+
+    Args:
+
+    """
     return render_template('Citation.html', name=CodeName)
 # =========================================================================================================
 
