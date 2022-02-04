@@ -22,7 +22,7 @@ import MCFunctions as mcf
 
 # Celery and Flask Initiations
 # =========================================================================================================
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='static')
 app.secret_key = "jjdd"
 
 # Things marked with these lines are examples for Celery
