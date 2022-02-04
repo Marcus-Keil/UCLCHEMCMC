@@ -40,10 +40,12 @@ celery.conf.update(app.config)
 # Parameter declarations, for now hard coded, will be exported to a file that can be changed
 # at the end.
 # =========================================================================================================
-
 CodeName = 'UCLCHEMCMC'
 
 ChemFile = "../data/Chemicals.csv"
+# =========================================================================================================
+
+# =========================================================================================================
 Chem = pd.read_csv(ChemFile, delimiter=",/", engine='python')
 Lines = Chem.set_index('Chemical')["Lines"].to_dict()
 for C in Lines.keys():
@@ -77,13 +79,13 @@ ParameterDefaults = {'finalDens': 1.0e5,
                      'radfield': 1,
                      'rout': 0.05}
 
-# MCMC Parameters as of now
-
-#
+# MCMC Parameters defaults
 MCMCwalkers = 1
 MCMCStepsPerRun = 200
 MCMCStepsPerItteration = 100
+# SQL database manager, leave this at one to prevent the SQL databases from locking
 ManagerPoolSize = 1
+# Fortran manager pool size
 FortranPoolSize = 1
 
 MCMCNumberProcesses = os.cpu_count() - 6
@@ -116,9 +118,20 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
             MCMCFile, GridDictionary, Informed=False, Walkers=MCMCwalkers,
             StepsPerClick=MCMCStepsPerRun, StepsPerSave=MCMCStepsPerItteration, startPoints=[]):
     """
+    This function starts the background processes in order to perform the MCMC inference
 
     Args:
-
+        BaseDict: Dictionary containing the basic UCLCHEM and RADEX parameters, that are not changing for the inference
+        ChangingParamList: List containing the parameters that will change during the inference
+        ChangingDictRanges: Dictionary containing the upper and lower bounds for each parameter
+        PDLinesJson: Pandas Dataframe of the emission lines in JSON format
+        MCMCFile: Name of the current session for sake of storing the MCMC model and user input
+        GridDictionary: Dictionary containing the grid values for each parameter
+        Informed: Boolean to determine if informed starting positions should be used
+        Walkers: Number of walkers the inference should use
+        StepsPerClick: Number of steps the inference should take before refreshing the UI
+        StepsPerSave: Number of steps to take between saving the inference and database
+        startPoints: the starting positions of the inference.
     """
     ParameterRanges = {}
     for P in GridDictionary.keys():
@@ -194,9 +207,10 @@ def RunMCMC(self, BaseDict, ChangingParamList, ChangingDictRanges, PDLinesJson,
 @celery.task(bind=True)
 def RunUCLCHEMAlone(self, UCLCHEMDict):
     """
-
+    Function to run UCLCHEM in the background alone
     Args:
-
+        self:
+        UCLCHEMDict: Dictionary containing the parameters UCLCHEM needs to run
     """
     UCLCHEMDict["phase"] = int(1)
     UCLCHEMDict["switch"] = int(UCLCHEMDict["switch"])
@@ -231,9 +245,7 @@ def RunUCLCHEMAlone(self, UCLCHEMDict):
 @app.route('/')
 def Index():
     """
-
-    Args:
-
+    Load and show index page
     """
     session.clear()
     return render_template('index.html', name=CodeName)
@@ -245,9 +257,8 @@ def Index():
 @app.route('/MCMCInference/', methods=["POST", "GET"])
 def MCMC():
     """
-
-    Args:
-
+    Load and show the first page of the MCMC inference. This also takes care of the loading in of sessions,
+    which grid is used and allows for the user to input the parameters ranges they wish to use.
     """
     if request.method == "POST":
         if 'Load_Session' in request.form and request.form['Session_name'] != '':
@@ -342,9 +353,7 @@ def MCMC():
 @app.route('/MCMCInference/Phys', methods=["POST", "GET"])
 def MCMCPhys():
     """
-
-    Args:
-
+    Load and show the page which allows users to confirm the physical ranges they wish to use
     """
     if request.method == "POST":
         return redirect(url_for("MCMCChem"))
@@ -359,9 +368,7 @@ def MCMCPhys():
 @app.route('/MCMCInference/Chem', methods=["POST", "GET"])
 def MCMCChem():
     """
-
-    Args:
-
+    Load and show the page where species and emission lines can be input
     """
     if "outSpecies" in session:
         NewChem = [Chem for Chem in Chemicals if Chem not in session["outSpecies"]]
@@ -437,9 +444,7 @@ def MCMCChem():
 @app.route('/UCLCHEM/', methods=["POST", "GET"])
 def UCLCHEM():
     """
-
-    Args:
-
+    Load and show the load and show the page which allows a version of UCLCHEM to be run
     """
     UCLCHEMDict = {}
     for parameter in Online_UCLCHEMParameters:
@@ -465,9 +470,7 @@ def UCLCHEM():
 @app.route('/UCLCHEM/PhysResults', methods=["GET"])
 def UCLCHEMPhysResults():
     """
-
-    Args:
-
+    Load and show the physical outputs of running UCLCHEM on it's own
     """
     return render_template('UCLCHEMPhysResults.html', name=CodeName, session=session)
 
@@ -475,9 +478,7 @@ def UCLCHEMPhysResults():
 @app.route('/UCLCHEM/ChemResults', methods=["GET"])
 def UCLCHEMChemResults():
     """
-
-    Args:
-
+    Load and show the chemical outputs of running UCLCHEM on it's own
     """
     return render_template('UCLCHEMChemResults.html', name=CodeName, session=session)
 # =========================================================================================================
@@ -487,9 +488,7 @@ def UCLCHEMChemResults():
 @app.route('/MCMCInference/Options', methods=["POST", "GET"])
 def Options():
     """
-
-    Args:
-
+    Load and show the penultimate page of the inference, which allows options to be input by the user
     """
     if request.method == "POST":
         session["Informed"] = request.form["Informed"]
@@ -523,9 +522,8 @@ def Options():
 @app.route('/MCMCInference/Results', methods=["POST", "GET"])
 def Results():
     """
-
-    Args:
-
+    Load and show the final page of the inference, which allows the inference to be started and the posteriors to be
+    viewed
     """
     ChangingParamList = []
     ChangingDictRange = {}
@@ -596,21 +594,7 @@ def Results():
 @app.route('/UCLCHEM/UCLCHEMTask', methods=['POST'])
 def UCLCHEMTask():
     """
-
-    Args:
-
-    """
-    UCLCHEMDict = session["UCLCHEMDict"]
-    task = RunUCLCHEMAlone.apply_async(args=[UCLCHEMDict])
-    return jsonify({}), 202, {'Location': url_for('UCLCHEMTaskStatus', task_id=task.id)}
-
-
-@app.route('/UCLCHEM/UCLCHEMTask', methods=['POST'])
-def UCLCHEMTask():
-    """
-
-    Args:
-
+    Function to perform the UCLCHEM run independently from the inference
     """
     UCLCHEMDict = session["UCLCHEMDict"]
     task = RunUCLCHEMAlone.apply_async(args=[UCLCHEMDict])
@@ -620,9 +604,9 @@ def UCLCHEMTask():
 @app.route('/UCLCHEM/status/<task_id>')
 def UCLCHEMTaskStatus(task_id):
     """
-
+    Task Status update function which monitors the background task and updates the progress bar for the UCLCHEM task
     Args:
-
+        task_id: the ID of the task that is being monitored
     """
     task = RunUCLCHEMAlone.AsyncResult(task_id)
     if task.state == 'PENDING':
@@ -655,9 +639,7 @@ def UCLCHEMTaskStatus(task_id):
 @app.route('/MCMCInference/Results/longtask', methods=['POST'])
 def longtask():
     """
-
-    Args:
-
+    Initial call of the background task which also prepares variables for the start of the inference
     """
     ChangingParamList = []
     ChangingDictRange = {}
@@ -692,9 +674,9 @@ def longtask():
 @app.route('/MCMCInference/Results/status/<task_id>')
 def taskstatus(task_id):
     """
-
+    Task Status update function which monitors the background task and updates the progress bar for the Inference task
     Args:
-
+        task_id: the ID of the task that is being monitored
     """
     task = RunMCMC.AsyncResult(task_id)
     if task.state == 'PENDING':
@@ -735,11 +717,6 @@ def taskstatus(task_id):
 # =========================================================================================================
 @app.route('/About')
 def About():
-    """
-
-    Args:
-
-    """
     return render_template('about.html', name=CodeName)
 # =========================================================================================================
 
@@ -748,11 +725,6 @@ def About():
 # =========================================================================================================
 @app.route('/Citation')
 def Citation():
-    """
-
-    Args:
-
-    """
     return render_template('Citation.html', name=CodeName)
 # =========================================================================================================
 
