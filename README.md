@@ -1,8 +1,8 @@
 Welcome to UCLCHEMCMC, the MCMC inference tool using chemical and radiative transfer full forward modeling. 
 
-![Inference Page](https://github.com/[Marcus-Keil]/[UCLCHEMCMC]/[main]/ResultsPage.png?raw=true)
-![Chemicals Page](https://github.com/[Marcus-Keil]/[UCLCHEMCMC]/[main]/ResultsPage.png?raw=true)
-![Results Page](https://github.com/[Marcus-Keil]/[UCLCHEMCMC]/[main]/ResultsPage.png?raw=true)
+![Inference Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/InferencePage.png)
+![Chemicals Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/ChemicalPage.png)
+![Results Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/ResultsPage.png)
 
 **************************************************************
 Installation Instructions:
