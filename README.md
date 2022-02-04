@@ -1,9 +1,13 @@
-Required Packages
+Welcome to UCLCHEMCMC, the MCMC inference tool using chemical and radiative transfer full forward modeling. 
 
-pandas numpy corner matplotlib emcee billiard bokeh flask celery
+![alt text](https://github.com/[Marcus-Keil]/[UCLCHEMCMC]/blob/[main]/ResultsPage.png?raw=true)
 
-
+**************************************************************
 Installation Instructions:
+**************************************************************
+
+Required Packages:
+    pandas numpy corner matplotlib emcee billiard bokeh flask celery
 
 Compile UCLCHEM:
 
@@ -20,24 +24,15 @@ Once this completes, take the "uclchem.so" file from
 
     /UCLCHEMCMC/src/UCLCHEM/
 
-to 
-
-    /UCLCHEMCMC/src/
-
 Compile Spectral Radex:
 
 In directory 
 
-    /UCLCHEMCMC/src/SpectralRadex/radex
-
-create a directory called bin, then in
-
-    /UCLCHEMCMC/src/SpectralRadex/radex/src
+    /UCLCHEMCMC/src/SpectralRadex
 
 call 
 
-    make install
-    make python
+    python3 setpu.py
 
 To Run UCLCHEMCMC:
 
@@ -48,9 +43,15 @@ In directory
 call
 
     bash runUCLCHEMCMC.sh
+    
+OR
+
+in three different terminals, or terminal windows, call the following:
+    
+    bash ./run-redis.sh
+    python GUI.py
+    celery worker -A GUI.celery --loglevel=info
 
 Upon finishing that, open a browser and go to following address 
 
     http://localhost:5000/
-
-From here, the user interface should guide the user on how to proceed.
