@@ -62,13 +62,13 @@ Upon finishing that, open a browser and go to following address
 
 Once the browser has been opened to localhost, and the Inference tab on the left has been selected. You should see the ability to input the name of a previous session or the option to choose a Coarse or Fine Grid. Inputing a session name and hitting load will take you to the Results page, while selecting a Grid should take you to the following page:
 
-![Inference Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/InferencePage.png)
+![Inference Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/ReadmeImages/InferencePage.png)
 
 Upon submitting and verifying the Parameter ranges, you will be greeted by the page to choose species and input observed emission line information as seen below.
 
-![Chemicals Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/ChemicalPage.png)
+![Chemicals Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/ReadmeImages/ChemicalPage.png)
 
 This is followed by the options page, where a session name can be given, number of walkers can be choosen and the amount of steps the inference should take prior to saving the inference can be input. This then takes you to the final page, the results where you have the option to start the inference as well as see the current Corner Plots of the inference.
 
-![Results Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/ResultsPage.png)
+![Results Page](https://github.com/Marcus-Keil/UCLCHEMCMC/blob/main/ReadmeImages/ResultsPage.png)
 
