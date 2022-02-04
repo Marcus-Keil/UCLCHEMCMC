@@ -1,4 +1,4 @@
-We present the publicly available, open source code UCLCHEMCMC, designed to estimate physical parameters of an observed cloud of gas by combining Monte Carlo Markov Chain (MCMC) sampling with chemical and radiative transfer modeling. When given the observed values of different emission lines, UCLCHEMCMC runs a Bayesian parameter inference, using a MCMC algorithm to sample the likelihood and produce an estimate of the posterior probability distribution of the parameters. UCLCHEMCMC takes a full forward modeling approach, generating model observables from the physical parameters via chemical and radiative transfer modeling. While running UCLCHEMCMC, the created chemical models and radiative transfer code results are stored in an SQL database, preventing redundant model calculations in future inferences.
+We present the publicly available, open source code UCLCHEMCMC, designed to estimate physical parameters of an observed cloud of gas by combining Monte Carlo Markov Chain (MCMC) sampling with chemical and radiative transfer modeling. When given the observed values of different emission lines, UCLCHEMCMC creates and stores chemical and radiative transfer models in an SQL database. These models are then used for the Inference to create the posteriors using the emcee package. The storing of the models is done in order to  prevent redundant model calculations in future inferences.
 
 For more details, we will add a link to the ApJ (Accepted) and astro-ph publication as soon as they go live.
 
@@ -8,6 +8,8 @@ For more details, we will add a link to the ApJ (Accepted) and astro-ph publicat
 
 Required Packages:
     pandas numpy corner matplotlib emcee billiard bokeh flask celery
+Required Software:
+    redis
 
 Compile UCLCHEM:
 
@@ -19,10 +21,6 @@ call
 
     make
     make python
-
-Once this completes, take the "uclchem.so" file from 
-
-    /UCLCHEMCMC/src/UCLCHEM/
 
 Compile Spectral Radex:
 
