@@ -1,0 +1,13 @@
+Python Packages:
+pandas 
+numpy 
+corner
+matplotlib 
+emcee 
+billiard 
+bokeh 
+flask 
+celery
+
+Other software:
+redis
