@@ -170,9 +170,13 @@ def MCMCSavesGridUI(MCMCSaveFile, numberProcesses, ndim, nwalkers, nSteps, known
 
 def plotLastCornerWebUI(MCMCSaveFile, changingParamsKeys, GridDictionary, startingPos):
     """
+    Plots the most recent corner plot that is available from the save file, or initial conditions of the inference
 
     Args:
-        
+        MCMCSaveFile: name of the current session for sake of storing the MCMC model and user input
+        changingParamsKeys: Keys of the dictionary of the parameters that are allowed to change
+        GridDictionary: Dictionary containing the arrays of the grid for each parameter
+        startingPos: Values of the starting position of the Inference
     """
     startingPosArray = np.asarray(startingPos.copy())
     nwalkers, ndim = startingPosArray.shape
@@ -202,9 +206,16 @@ def plotLastCornerWebUI(MCMCSaveFile, changingParamsKeys, GridDictionary, starti
 
 def make_Hist(hist, edges, CurrentGrid, xAxisLabel = '', yAxisLabel = '', width=100):
     """
+    Makes a histogram of the posteriors using just one parameter, used in plotting corner
+    plots when not using the "corner" package
 
     Args:
-
+        hist: The values of the np.hist function
+        edges: The edges of each bin for the histogram
+        CurrentGrid: Grid dictionary of the current parameters grid space
+        xAxisLabel: Label to be given to the X axis
+        yAxisLabel: Label to be given to the Y axis
+        width: the width that the plot should have
     """
     if xAxisLabel != '':
         height = width + 37
@@ -240,9 +251,17 @@ def make_Hist(hist, edges, CurrentGrid, xAxisLabel = '', yAxisLabel = '', width=
 
 def make_HM(hist, xedge, yedge, XGrid, YGrid, xAxisLabel = '', yAxisLabel = '', width=100):
     """
-
+    Creates the 2d distribution of two parameters, used when the "corner" package is not being used to create
+    the corner plots
     Args:
-
+        hist: The values of the np.hist function
+        xedge: The edges of each bin for the histogram of the X axis
+        yedge: The edges of each bin for the histogram of the Y axis
+        XGrid: Grid dictionary of the current parameters grid space for the X axis
+        YGrid: Grid dictionary of the current parameters grid space for the Y axis
+        xAxisLabel: Label to be given to the X axis
+        yAxisLabel: Label to be given to the Y axis
+        width: the width that the plot should have
     """
     values = np.unique(hist)
     for i in range(len(values)):
@@ -298,9 +317,13 @@ def make_HM(hist, xedge, yedge, XGrid, YGrid, xAxisLabel = '', yAxisLabel = '', 
 
 def make_Grid(ndim, flat_samples, ParameterNames, GridDictionary):
     """
+    Corner plot function that uses make_HM and make_hist to create corner plots for the User interface
 
     Args:
-
+        ndim: number of dimensions that the inference has
+        flat_samples: the flattened chain samples from the inference
+        ParameterNames: name of the parameters being inferred
+        GridDictionary: Dictionary containing the arrays of the grid for each parameter
     """
     defaultWidth = int(800 / ndim)
     allDimensions = []
@@ -364,9 +387,21 @@ def make_Grid(ndim, flat_samples, ParameterNames, GridDictionary):
 def CornerPlots(SessionName, Parameters, GridType='Coarse', BurnIn=-1, PlotChains = False,
                 CornerPackagePlot=False, PlotGivenValues=False, GivenValues=[],ReturnMostProbable=False):
     """
+    Creates corner plots with or without the "corner" package, based on the preferences of a user, in order to
+    be used for publications
 
     Args:
-
+        SessionName: name of the current session for sake of storing the MCMC model and user input
+        Parameters: list of the parameters over which the inference is being performed
+        GridType: name of the grid that is being used
+        BurnIn: number of steps to remove from the beginning of the chain to remove the steps the walkers took
+            from the starting positions towards the distribution they settled into
+        PlotChains: boolean to determine if the chains for each parameter should be plotted
+        CornerPackagePlot: boolean to determine if the "corner" package should be used or not
+        PlotGivenValues: boolean to determine if given values should be plotted, if this is true GivenValues should
+            be given to the function
+        GivenValues: list of given values to plot over the results
+        ReturnMostProbable: boolean to determine if the most probable values should be returned to the user or not
     """
     if PlotGivenValues and (GivenValues == [] or len(Parameters) != len(GivenValues)):
         print("GivenValues must have the same number of entries as Parameters, if you set PlotGivenValues to True."
@@ -569,9 +604,13 @@ def CornerPlots(SessionName, Parameters, GridType='Coarse', BurnIn=-1, PlotChain
 
 def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviationSpread=0.1, WithError=False):
     """
+    Creates synthetic data and applies noise to it
 
     Args:
-
+        ChangingParameters: list of changing parameters
+        LinesOfInterestDict: dictionary of each species of interest and the lines those species are emitting
+        StandardDeviationSpread: the standard deviation to use for adding noise to the synthetic data
+        WithError: boolean to determine if error bars should be included or not
     """
     BaseDictionary = {"phase": 1, "switch": 1, "collapse": 1, "readAbunds": 0, "writeStep": 1, "points": 1, "desorb": 1,
                       "finalOnly": "True", "fr": 1.0}
@@ -603,11 +642,13 @@ def MakeSyntheticData(ChangingParameters, LinesOfInterestDict, StandardDeviation
         return UCLParamOut[ReturnLines]
 
 
-def MakeRotationData(ChangingParameters, LinesOfInterestDict, StandardDeviationSpread=0.1, WithError=False):
+def MakeRotationData(ChangingParameters, LinesOfInterestDict):
     """
+    This function creates and returns values needed to create a rotation diagram like plot
 
     Args:
-
+        ChangingParameters: list of changing parameters
+        LinesOfInterestDict: dictionary of each species of interest and the lines those species are emitting
     """
     BaseDictionary = {"phase": 1, "switch": 1, "collapse": 1, "readAbunds": 0, "writeStep": 1, "points": 1, "desorb": 1,
                       "finalOnly": "True", "fr": 1.0}
