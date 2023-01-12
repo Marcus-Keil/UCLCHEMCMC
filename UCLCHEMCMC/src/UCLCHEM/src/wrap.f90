@@ -301,7 +301,7 @@ CONTAINS
         END DO
     END SUBROUTINE alpha_parser
 
-    SUBROUTINE TO_DF(dictionary, outSpeciesIn, numberPoints, parameterArray, chemicalAbunArray, stepCount)
+    SUBROUTINE TO_DF(dictionary, outSpeciesIn, numberPoints, parameterArray, chemicalAbunArray, allChemicalAbunArray, stepCount)
         USE physics
         USE chemistry
         CHARACTER(LEN=*) :: dictionary, outSpeciesIn
@@ -314,12 +314,18 @@ CONTAINS
         !f2py intent(in out) stepCount
         DOUBLE PRECISION, INTENT(INOUT), DIMENSION(10000, numberPoints, 12) :: parameterArray
         DOUBLE PRECISION, INTENT(INOUT), DIMENSION(10000, numberPoints, 215) :: chemicalAbunArray
+        DOUBLE PRECISION, INTENT(INOUT), DIMENSION(10000, numberPoints, 215) :: allChemicalAbunArray
         !f2py intent(in out) parameterArray
         !f2py depend(numberPoints) parameterArray
         !f2py intent(in out) chemicalAbunArray
         !f2py depend(numberPoints) chemicalAbunArray
+        !f2py intent(in out) allChemicalAbunArray
+        !f2py depend(numberPoints) allChemicalAbunArray
         CHARACTER(LEN=10), ALLOCATABLE, DIMENSION(:) :: chemicals
         CHARACTER(LEN=10) :: finalOnly = "False"
+        LOGICAL :: readAbundsBool = .False.
+        DOUBLE PRECISION, DIMENSION(numberPoints) :: tempAV
+        DOUBLE PRECISION :: temph2form, tempfc, tempfo, tempfmg, tempfhe, tempdstep
         include 'defaultparameters.f90'
         close(10)
         close(11)
@@ -486,9 +492,36 @@ CONTAINS
             END SELECT
         END DO
 
+        IF (readAbunds == 1.0) THEN
+            readAbundsBool = .True.
+            readAbunds = 0
+            tempAV(1) = parameterArray(1, 1, 4)
+            temph2form = parameterArray(1, 1, 7)
+            tempfc = parameterArray(1, 1, 8)
+            tempfo = parameterArray(1, 1, 9)
+            tempfmg = parameterArray(1, 1, 10)
+            tempfhe = parameterArray(1, 1, 11)
+            tempdstep = parameterArray(1, 1, 12)
+            !abund(nspec+1,1)=initialDens
+            parameterArray = 0.
+        ELSE
+            readAbundsBool = .False.
+        END IF
+
         CALL initializePhysics
         CALL initializeChemistry
 
+        IF (readAbundsBool.eqv..TRUE.) THEN
+            abund(:,1) = allChemicalAbunArray(1,1,:)
+            av(1) = tempAV(1)
+            h2form = temph2form
+            fc = tempfc
+            fo = tempfo
+            fmg = tempfmg
+            fhe = tempfhe
+            dstep = tempdstep
+            !abund(nspec+1,1)=initialDens
+        END IF
         dstep=1
         currentTime=0.0
         timeInYears=0.0
@@ -499,31 +532,30 @@ CONTAINS
 
         !loop until the end condition of the model is reached
         DO WHILE ((switch .eq. 1 .and. density(1) < finalDens) .or. (switch .eq. 0 .and. timeInYears < finalTime))
-
             !store current time as starting point for each depth step
-            IF (points .gt. 1) THEN
-                currentTimeold=targetTime
-                currentTime=currentTimeold
-            END IF
+            currentTimeold=currentTime
+
             !Each physics module has a subroutine to set the target time from the current time
             CALL updateTargetTime
 
             !loop over parcels, counting from centre out to edge of cloud
             DO dstep=1,points
-
-                density=abund(nspec+1,dstep)
-                !update physics
-                CALL updatePhysics
-                !update chemistry
+                !update chemistry from currentTime to targetTime
                 CALL updateChemistry
 
-                !set time to the final time of integrator rather than target
-                targetTime=currentTime
-                !reset target for next depth point
-                if (points .gt. 1)currentTime=currentTimeold
-                !get time in years for output
+                currentTime=targetTime
+                !get time in years for output, currentTime is now equal to targetTime
                 timeInYears= currentTime/SECONDS_PER_YEAR
-                !write this depth step
+
+                !Update physics so it's correct for new currentTime and start of next time step
+                CALL updatePhysics
+                !Sublimation checks if Sublimation should happen this time step and does it
+                CALL sublimation(abund)
+                !write this depth step now time, chemistry and physics are consistent
+                CALL output
+
+                !reset time for next depth point
+                if (points .gt. 1)currentTime=currentTimeold
 
                 IF (finalOnly=="False") THEN
                     IF (writeCounter.GE.writeStep) THEN
@@ -542,6 +574,7 @@ CONTAINS
                         parameterArray(itterationInteger, dstep, 12) = dstep
 
                         DO i=1, nspec
+                            allChemicalAbunArray(itterationInteger, dstep, i) = abund(i,dstep)
                             DO j=1, nout
                                 IF(specname(i).EQ.chemicals(j)) THEN
                                     chemicalAbunArray(itterationInteger, dstep, j) = abund(i,dstep)
@@ -555,7 +588,9 @@ CONTAINS
                     END IF
                 END IF
 
-                IF((finalOnly=="True").and.((switch.eq.1.and.density(1)>finalDens).or.(switch.eq.0.and.timeInYears>finalTime)))THEN
+                IF((finalOnly=="True").and.&
+                        ((switch.eq.1.and.density(1).ge.finalDens).or.&
+                                (switch.eq.0.and.timeInYears.ge.finalTime)))THEN
                     stepCount(1) = stepCount(1) + 1
                     parameterArray(itterationInteger, dstep, 1) = timeInYears
                     parameterArray(itterationInteger, dstep, 2) = density(dstep)
@@ -570,6 +605,7 @@ CONTAINS
                     parameterArray(itterationInteger, dstep, 11) = fhe
                     parameterArray(itterationInteger, dstep, 12) = dstep
                     DO i=1, nspec
+                        allChemicalAbunArray(itterationInteger, dstep, i) = abund(i,dstep)
                         DO j=1, nout
                             IF(specname(i).EQ.chemicals(j)) THEN
                                 chemicalAbunArray(itterationInteger, dstep, j) = abund(i,dstep)
@@ -580,6 +616,5 @@ CONTAINS
             END DO
         END DO
         writeCounter = 0
-        CALL SLEEP(2)
     END SUBROUTINE TO_DF
 END MODULE wrap
